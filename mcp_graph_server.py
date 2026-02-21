@@ -894,10 +894,9 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
 def main() -> int:
     import anyio
     import uvicorn
-    from starlette.applications import Starlette
     from starlette.requests import Request
-    from starlette.responses import JSONResponse
-    from starlette.routing import Mount, Route
+    from starlette.responses import JSONResponse, Response
+    from starlette.routing import Route
 
     port = int(os.environ.get("PORT", 8080))
     mcp = build_server(host="0.0.0.0", port=port)
@@ -923,8 +922,6 @@ def main() -> int:
         })
 
     # ── Static file routes: serve dg + graph_builder so users can curl-install ──
-    from starlette.responses import Response
-
     _HERE = Path(__file__).resolve().parent
 
     async def serve_graph_builder(request: Request) -> Response:
@@ -969,17 +966,22 @@ echo "  dg /path/to/project"
 """
         return Response(script, media_type="text/plain")
 
+    # Get the MCP app with its lifespan (session manager) intact.
+    # IMPORTANT: do NOT wrap mcp_app in a new Starlette app via Mount("/") —
+    # that kills the inner lifespan so the session manager never starts,
+    # causing every /mcp request to return HTTP 500.
+    # Instead, prepend our custom routes directly into mcp_app's own router
+    # so it remains the top-level ASGI app and its lifespan runs normally.
     mcp_app = mcp.streamable_http_app()
-    app = Starlette(routes=[
+    mcp_app.router.routes[0:0] = [
         Route("/ingest-graph", ingest_graph, methods=["POST"]),
         Route("/install.sh", serve_install, methods=["GET"]),
         Route("/dg", serve_dg, methods=["GET"]),
         Route("/graph_builder.py", serve_graph_builder, methods=["GET"]),
-        Mount("/", app=mcp_app),
-    ])
+    ]
 
     async def serve() -> None:
-        config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+        config = uvicorn.Config(mcp_app, host="0.0.0.0", port=port, log_level="info")
         await uvicorn.Server(config).serve()
 
     anyio.run(serve)
