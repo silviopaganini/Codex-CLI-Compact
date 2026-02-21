@@ -707,7 +707,39 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         """
         Continue a conversation using action-memory search first, then info-graph retrieval only if needed.
         Returns compact context hints instead of full chat dump.
+
+        IMPORTANT — project setup check:
+        If the response contains needs_project=True, no project has been scanned yet.
+        You MUST:
+          1. Ask the user: "Which directory should I scan? (default: current working directory)"
+          2. Use their answer (or current working directory / pwd if they confirm the default).
+          3. Call graph_scan(project_root=<path>) with that path.
+          4. Then call graph_continue again to proceed with the original query.
+        Do NOT attempt to answer the query until graph_scan has been called.
         """
+        # ── Project setup gate ────────────────────────────────────────────────
+        graph_json = Path(__file__).resolve().parent / "data" / "info_graph.json"
+        project_missing = not PROJECT_ROOT.is_dir()
+        graph_missing = not graph_json.exists()
+        graph_empty = False
+        if not graph_missing:
+            try:
+                graph_empty = json.loads(graph_json.read_text(encoding="utf-8")).get("node_count", 0) == 0
+            except Exception:
+                graph_empty = True
+        if project_missing or graph_missing or graph_empty:
+            return {
+                "ok": False,
+                "needs_project": True,
+                "query": query,
+                "instruction": (
+                    "No project has been scanned yet. "
+                    "Ask the user: 'Which directory should I scan? (default: current working directory / pwd)'. "
+                    "Then call graph_scan(project_root=<confirmed_path>). "
+                    "After graph_scan succeeds, call graph_continue again with the original query."
+                ),
+            }
+
         hist = _search_action_history(query, limit=limit)
         file_hits = hist.get("file_hits", [])
         action_hits = hist.get("action_hits", [])
