@@ -186,21 +186,32 @@ def _ensure_node(g: dict[str, Any], node_id: str, node_type: str, meta: dict[str
 
 def _add_edge(g: dict[str, Any], frm: str, to: str, rel: str, meta: dict[str, Any] | None = None) -> None:
     edges = g.setdefault("edges", [])
-    row: dict[str, Any] = {"from": frm, "to": to, "rel": rel, "ts": _now_iso()}
+    # Use epoch seconds (not ISO string) to save space.
+    row: dict[str, Any] = {"from": frm, "to": to, "rel": rel, "ts": int(datetime.now(timezone.utc).timestamp())}
     if meta:
         row["meta"] = meta
     edges.append(row)
-    # Keep graph bounded.
-    if len(edges) > 2000:
-        del edges[:-2000]
+    # Keep last 500 edges only.
+    if len(edges) > 500:
+        del edges[:-500]
+
+
+def _slim_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Strip large fields from action payloads before storing."""
+    keep: dict[str, Any] = {"kind": kind}
+    for k in ("file", "query", "mode", "pattern", "response_chars", "overlap"):
+        if k in payload:
+            keep[k] = payload[k]
+    return keep
 
 
 def _record_action(kind: str, payload: dict[str, Any]) -> None:
     g = _load_action_graph()
     actions = g.setdefault("actions", [])
-    actions.append({"ts": _now_iso(), "kind": kind, "payload": payload})
-    if len(actions) > 1000:
-        del actions[:-1000]
+    # Store only slim metadata — never full file content.
+    actions.append({"ts": int(datetime.now(timezone.utc).timestamp()), "kind": kind, "payload": _slim_payload(kind, payload)})
+    if len(actions) > 300:
+        del actions[:-300]
     _save_action_graph(g)
 
 
@@ -213,6 +224,12 @@ def _load_retrieval_cache() -> dict[str, Any]:
             return {"entries": {}}
         if "entries" not in data or not isinstance(data["entries"], dict):
             data["entries"] = {}
+        # Eagerly evict expired entries on load so file never grows stale.
+        now = int(datetime.now(timezone.utc).timestamp())
+        data["entries"] = {
+            k: v for k, v in data["entries"].items()
+            if isinstance(v, dict) and now - int(v.get("created_epoch", 0)) <= RETRIEVE_CACHE_TTL_SEC
+        }
         return data
     except Exception:
         return {"entries": {}}
@@ -286,43 +303,32 @@ def _search_action_history(query: str, limit: int = 10) -> dict[str, Any]:
     actions = g.get("actions", [])
     files_meta = g.get("files", {})
 
-    # Recent relevant actions by term overlap in payload JSON.
+    # Recent relevant actions — return only slim metadata, never full payload.
     action_hits: list[dict[str, Any]] = []
     for a in reversed(actions):
         payload = a.get("payload", {})
-        blob = json.dumps(payload, ensure_ascii=False).lower()
+        # Score against slim payload only (already stripped of large content).
+        blob = " ".join(str(v) for v in payload.values()).lower()
         overlap = sum(1 for t in qterms if t in blob)
         if overlap <= 0 and qterms:
             continue
-        action_hits.append(
-            {
-                "ts": a.get("ts"),
-                "kind": a.get("kind"),
-                "overlap": overlap,
-                "payload": payload,
-            }
-        )
+        action_hits.append({"kind": a.get("kind"), "file": payload.get("file", ""), "overlap": overlap})
         if len(action_hits) >= limit:
             break
 
-    # Relevant cached files from prior turns.
+    # Relevant cached files — slim response, no cached_content.
     file_hits: list[dict[str, Any]] = []
     for file, meta in files_meta.items():
         cached_terms = set(meta.get("query_terms", []))
         overlap = len(qterms & cached_terms) if qterms else 0
         if qterms and overlap <= 0:
             continue
-        file_hits.append(
-            {
-                "file": file,
-                "overlap": overlap,
-                "cached_tokens_est": int(meta.get("cached_tokens_est", 0)),
-                "edited_count": int(meta.get("edited_count", 0)),
-                "last_action": meta.get("last_action", ""),
-                "last_ts": meta.get("last_ts", ""),
-            }
-        )
-    file_hits.sort(key=lambda x: (-x["overlap"], -x["edited_count"], -x["cached_tokens_est"], x["file"]))
+        file_hits.append({
+            "file": file,
+            "overlap": overlap,
+            "edited_count": int(meta.get("edited_count", 0)),
+        })
+    file_hits.sort(key=lambda x: (-x["overlap"], -x["edited_count"], x["file"]))
     return {"action_hits": action_hits, "file_hits": file_hits[:limit]}
 
 
@@ -434,18 +440,14 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             entries = {}
         entries[ck] = {
             "created_epoch": int(datetime.now(timezone.utc).timestamp()),
-            "query": query,
-            "top_files": top_files,
-            "top_edges": top_edges,
-            "files": rel_files,
+            "files": rel_files,        # only file IDs, not full objects
             "mtimes_ns": mtimes,
             "result": out,
         }
-        # Bound cache size
-        if len(entries) > 200:
-            # prune oldest by created time
+        # Bound cache size to 50 entries (down from 200).
+        if len(entries) > 50:
             items = sorted(entries.items(), key=lambda kv: int(kv[1].get("created_epoch", 0)))
-            for old_key, _ in items[:-200]:
+            for old_key, _ in items[:-50]:
                 entries.pop(old_key, None)
         rcache["entries"] = entries
         _save_retrieval_cache(rcache)
@@ -582,7 +584,11 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             text = _excerpt_by_terms(text, terms, granted)
             mode = "query_excerpt" if query else "head"
         TURN_STATE["used_chars"] = used + len(text)
-        seen[dedupe_key] = text
+        # Store only a 200-char fingerprint for dedupe — not the full content.
+        seen[dedupe_key] = text[:200]
+        if len(seen) > 20:  # evict oldest if too many entries
+            oldest = next(iter(seen))
+            del seen[oldest]
         TURN_STATE["seen_reads"] = seen
         payload = {
             "file": file,
@@ -605,11 +611,11 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         _add_edge(g, qid, file, "read", {"mode": mode})
         files_meta[file] = {
             "query_terms": qterms,
-            "cached_content": text,
+            "cached_content": text[:300],          # cap to 300 chars — just enough for context hints
             "cached_chars": len(text),
             "cached_tokens_est": _est_tokens(text),
             "last_action": "read",
-            "last_ts": _now_iso(),
+            "last_ts": int(datetime.now(timezone.utc).timestamp()),
         }
         _save_action_graph(g)
         return {"ok": True, "file": file, "content": text, "mode": mode}
@@ -754,17 +760,19 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
 
         # If we already have relevant cached files from prior turns, prefer those first.
         if file_hits:
+            rec = [f["file"] for f in file_hits[: min(3, len(file_hits))]]
+            # Apply time-decay: files only recommended if touched in recent 5 actions.
+            recent_files = {a.get("file", "") for a in action_hits}
+            rec = [f for f in rec if f in recent_files] or rec
             out = {
                 "ok": True,
                 "mode": "memory_first",
                 "query": query,
-                "recommended_files": [f["file"] for f in file_hits[: min(3, len(file_hits))]],
-                "memory_file_hits": file_hits[:limit],
-                "memory_action_hits": action_hits[:limit],
+                "recommended_files": rec,
                 "instruction": "Use graph_read on recommended_files first; avoid new retrieval unless insufficient.",
             }
-            _log_tool("graph_continue", {"query": query, "mode": "memory_first", "recommended_files": out["recommended_files"]})
-            _record_action("continue_memory_first", {"query": query, "recommended_files": out["recommended_files"]})
+            _log_tool("graph_continue", {"query": query, "mode": "memory_first", "recommended_files": rec})
+            _record_action("continue_memory_first", {"query": query, "recommended_files": rec})
             return out
 
         # No relevant memory: do single retrieval and return compact suggestions.
@@ -775,9 +783,6 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             "mode": "retrieve_then_read",
             "query": query,
             "recommended_files": rec_files[: min(3, len(rec_files))],
-            "retrieve_summary": retrieved.get("summary", ""),
-            "reuse_candidates": retrieved.get("reuse_candidates", []),
-            "read_budget": retrieved.get("read_budget", {}),
             "instruction": "Use graph_read on recommended_files; do not dump full chat history.",
         }
         _log_tool("graph_continue", {"query": query, "mode": "retrieve_then_read", "recommended_files": out["recommended_files"]})
