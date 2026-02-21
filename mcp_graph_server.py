@@ -724,8 +724,11 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         Do NOT attempt to answer the query until graph_scan has been called.
         """
         # ── Project setup gate ────────────────────────────────────────────────
+        # Only check the graph file — NOT PROJECT_ROOT.is_dir().
+        # In the Railway upload model the project directory never exists on the
+        # server; the graph arrives via POST /ingest-graph, so the graph file
+        # is the only reliable signal that the project has been scanned.
         graph_json = Path(__file__).resolve().parent / "data" / "info_graph.json"
-        project_missing = not PROJECT_ROOT.is_dir()
         graph_missing = not graph_json.exists()
         graph_empty = False
         if not graph_missing:
@@ -733,7 +736,7 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
                 graph_empty = json.loads(graph_json.read_text(encoding="utf-8")).get("node_count", 0) == 0
             except Exception:
                 graph_empty = True
-        if project_missing or graph_missing or graph_empty:
+        if graph_missing or graph_empty:
             gb_script = str(Path(__file__).resolve().parent / "graph_builder.py")
             ingest_url = f"{DG_BASE}/ingest-graph"
             return {
