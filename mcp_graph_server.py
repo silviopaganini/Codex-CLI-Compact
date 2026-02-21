@@ -783,9 +783,9 @@ def build_server() -> Any:
 def main() -> int:
     mcp = build_server()
     port = int(os.environ.get("PORT", 8080))
-    # FastMCP reads host/port from env vars, not run() kwargs.
-    os.environ.setdefault("FASTMCP_HOST", "0.0.0.0")
-    os.environ["FASTMCP_PORT"] = str(port)
+    # Set host/port on settings object — env vars are not reliably picked up.
+    mcp.settings.host = "0.0.0.0"
+    mcp.settings.port = port
     # Use SSE transport so the server is reachable over HTTP from Codex/Claude.
     # Codex: codex --mcp-server-uri https://<railway-url>/sse "your task"
     mcp.run(transport="sse")
