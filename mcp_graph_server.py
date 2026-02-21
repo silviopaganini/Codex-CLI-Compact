@@ -728,15 +728,23 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             except Exception:
                 graph_empty = True
         if project_missing or graph_missing or graph_empty:
+            gb_script = str(Path(__file__).resolve().parent / "graph_builder.py")
+            ingest_url = f"{DG_BASE}/ingest-graph"
             return {
                 "ok": False,
                 "needs_project": True,
                 "query": query,
+                "graph_builder": gb_script,
+                "ingest_url": ingest_url,
                 "instruction": (
-                    "No project has been scanned yet. "
-                    "Ask the user: 'Which directory should I scan? (default: current working directory / pwd)'. "
-                    "Then call graph_scan(project_root=<confirmed_path>). "
-                    "After graph_scan succeeds, call graph_continue again with the original query."
+                    "No project scanned yet. Do these steps in order:\n"
+                    "1. Ask the user: 'Which directory should I scan? (default: current working directory)'\n"
+                    "2. If they say 'current' or press Enter, run `pwd` to get the path.\n"
+                    "3. Build the graph locally by running this shell command:\n"
+                    f"   python3 {gb_script} --root <project_path> --out /tmp/dg_graph.json\n"
+                    "4. Upload it to the server:\n"
+                    f"   curl -s -X POST {ingest_url} -H 'Content-Type: application/json' --data-binary @/tmp/dg_graph.json\n"
+                    "5. Call graph_continue again with the original query."
                 ),
             }
 

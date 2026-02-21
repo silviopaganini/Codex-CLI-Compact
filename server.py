@@ -117,6 +117,9 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/token-reset":
                 self.reset_token_log()
                 return
+            if parsed.path == "/ingest-graph":
+                self.ingest_graph()
+                return
             self.send_error(HTTPStatus.NOT_FOUND, "Unknown endpoint")
         except (BrokenPipeError, ConnectionResetError, OSError):
             return
@@ -157,6 +160,28 @@ class Handler(BaseHTTPRequestHandler):
             "pull_stderr": pull_err,
             "node_count": graph["node_count"],
             "edge_count": graph["edge_count"],
+        })
+
+    def ingest_graph(self) -> None:
+        """POST /ingest-graph — accept a pre-built graph JSON from a local machine."""
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Empty body")
+            return
+        body = self.rfile.read(length)
+        try:
+            graph = json.loads(body)
+            if "nodes" not in graph or "edges" not in graph:
+                raise ValueError("missing nodes/edges")
+        except Exception as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid graph JSON: {exc}")
+            return
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        GRAPH_JSON.write_text(json.dumps(graph, indent=2), encoding="utf-8")
+        self.write_json({
+            "ok": True,
+            "node_count": graph.get("node_count", len(graph["nodes"])),
+            "edge_count": graph.get("edge_count", len(graph["edges"])),
         })
 
     def trigger_scan(self) -> None:
