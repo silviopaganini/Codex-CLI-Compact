@@ -77,9 +77,10 @@ echo ""
 echo "[dgc] Starting claude..."
 echo ""
 
-# ── Start Claude Code ─────────────────────────────────────────────────────────
+# ── Start Claude Code (cd into project so CLAUDE.md is picked up) ────────────
+cd "$PROJECT"
 if [[ -n "$PROMPT" ]]; then
-  claude --add-dir "$PROJECT" "$PROMPT"
+  exec claude "$PROMPT"
 else
-  claude --add-dir "$PROJECT"
+  exec claude
 fi
