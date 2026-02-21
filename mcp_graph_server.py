@@ -811,12 +811,28 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         graph_json.parent.mkdir(parents=True, exist_ok=True)
         graph_json.write_text(json.dumps(graph, indent=2), encoding="utf-8")
 
-        # Update module-level root so graph_read / fallback_rg use the new path.
+        # Update module-level root so graph_read / fallback_rg resolve correctly.
         PROJECT_ROOT = root
 
-        # Invalidate retrieval cache so stale results don't bleed in.
-        if RETRIEVAL_CACHE_FILE.exists():
-            RETRIEVAL_CACHE_FILE.unlink(missing_ok=True)
+        # ── Reset all project-specific state ─────────────────────────────────
+        # Retrieval cache: stale file scores from old project.
+        RETRIEVAL_CACHE_FILE.unlink(missing_ok=True)
+
+        # Action graph: file reads/edits belong to the old project.
+        _save_action_graph({"nodes": [], "edges": [], "files": {}, "actions": []})
+
+        # Turn state: in-memory budgets, seen reads, retrieved file list.
+        TURN_STATE.update({
+            "query_key": "",
+            "used_chars": 0,
+            "seen_reads": {},
+            "reuse_gate_candidates": [],
+            "reuse_gate_satisfied": False,
+            "retrieved_files": [],
+            "retrieve_count": 0,
+            "last_retrieve_out": None,
+            "fallback_calls": 0,
+        })
 
         _log_tool("graph_scan", {"project_root": str(root), "nodes": graph["node_count"], "edges": graph["edge_count"]})
         return {
@@ -824,7 +840,7 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             "project_root": str(root),
             "node_count": graph["node_count"],
             "edge_count": graph["edge_count"],
-            "message": "Graph built. Use graph_continue or graph_retrieve to query it.",
+            "message": "Graph built. Action graph and caches reset. Use graph_continue or graph_retrieve to query.",
         }
 
     return mcp
