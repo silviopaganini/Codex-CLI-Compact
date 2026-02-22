@@ -18,8 +18,17 @@ VENV="$SCRIPT_DIR/venv"
 PROJECT="${1:-$(pwd)}"
 PROJECT="$(cd "$PROJECT" && pwd)"   # resolve to absolute
 PROMPT="${2:-}"
-MCP_PORT=8080
 DATA_DIR="$PROJECT/.dual-graph"
+
+# ── Find a free port starting at 8080 ────────────────────────────────────────
+find_free_port() {
+  local port=8080
+  while lsof -ti:$port &>/dev/null; do
+    port=$((port + 1))
+  done
+  echo $port
+}
+MCP_PORT=$(find_free_port)
 
 # ── Ensure venv + deps exist ──────────────────────────────────────────────────
 if [[ ! -x "$VENV/bin/python3" ]]; then
@@ -109,7 +118,13 @@ for i in $(seq 1 20); do
   sleep 1
 done
 
-echo "[dgc] MCP server ready."
+echo "[dgc] MCP server ready on port $MCP_PORT."
+echo ""
+
+# ── Update claude MCP config to use the correct port ─────────────────────────
+claude mcp remove dual-graph 2>/dev/null || true
+claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp"
+echo "[dgc] MCP config updated → http://localhost:$MCP_PORT/mcp"
 echo ""
 echo "[dgc] Starting claude..."
 echo ""
