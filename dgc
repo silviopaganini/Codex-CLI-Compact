@@ -103,7 +103,7 @@ DG_DATA_DIR="$DATA_DIR" \
 DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
 DG_BASE_URL="http://localhost:$MCP_PORT" \
 PORT=$MCP_PORT \
-  "$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" &
+  "$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" >> "$DATA_DIR/mcp_server.log" 2>&1 &
 MCP_PID=$!
 
 # Kill server when claude exits
