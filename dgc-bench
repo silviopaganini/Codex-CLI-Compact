@@ -22,9 +22,7 @@ BENCH_LOG="$SCRIPT_DIR/bench_log.jsonl"
 MCP_PORT=8080
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
-_tokens_from_stream() {
-  # Extract total tokens from claude --output-format stream-json output
-  "$PYTHON" - << 'PYEOF'
+_TOK_SCRIPT='
 import sys, json
 inp = out = 0
 for line in sys.stdin:
@@ -36,8 +34,17 @@ for line in sys.stdin:
         if u and isinstance(u, dict):
             inp = max(inp, int(u.get("input_tokens",  0)))
             out = max(out, int(u.get("output_tokens", 0)))
+    t = obj.get("total_input_tokens", 0)
+    if t: inp = max(inp, int(t))
+    t = obj.get("total_output_tokens", 0)
+    if t: out = max(out, int(t))
 print(inp + out)
-PYEOF
+'
+
+_tokens_from_stream() {
+  # Extract total tokens from claude --output-format stream-json output
+  # Uses -c so stdin is free for the pipe (heredoc would conflict)
+  "$PYTHON" -c "$_TOK_SCRIPT"
 }
 
 _BENCH_STDERR="/tmp/dgc_bench_stderr.log"
