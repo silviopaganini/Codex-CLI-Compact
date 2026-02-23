@@ -59,26 +59,36 @@ for line in sys.stdin:
     except: continue
     if obj.get("type") == "assistant":
         for block in obj.get("message", {}).get("content", []):
-            if block.get("type") == "text":
-                print(block["text"], end="", flush=True)
-            elif block.get("type") == "tool_use":
+            btype = block.get("type", "")
+            if btype == "text":
+                sys.stdout.write(block.get("text", ""))
+                sys.stdout.flush()
+            elif btype == "tool_use":
+                name = block.get("name", "")
                 inp = str(block.get("input", {}))[:80]
-                print(f"\n  \033[90m→ {block[\"name\"]}({inp})\033[0m", flush=True)
+                sys.stdout.write("  -> " + name + "(" + inp + ")\n")
+                sys.stdout.flush()
     elif obj.get("type") == "result":
-        print()  # newline after last output
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 '
 
 _run_headless() {
-  # Stream output live to terminal while capturing stream-json for token counting
+  # Stream output live to terminal; capture tokens via temp file (subshell for cd)
   local workdir="$1" prompt="$2"
   local capfile="/tmp/dgc_bench_cap_$$.jsonl"
-  cd "$workdir"
-  claude --output-format stream-json --verbose --print --dangerously-skip-permissions "$prompt" \
-    2>"$_BENCH_STDERR" \
-    | tee "$capfile" \
-    | "$PYTHON" -c "$_DISPLAY_SCRIPT" || true
-  _LAST_TOKENS=$(cat "$capfile" | "$PYTHON" -c "$_TOK_SCRIPT" 2>/dev/null || echo 0)
+  local tokfile="/tmp/dgc_bench_tok_$$.txt"
+  (
+    cd "$workdir"
+    claude --output-format stream-json --verbose --print --dangerously-skip-permissions "$prompt" \
+      2>"$_BENCH_STDERR" \
+      | tee "$capfile" \
+      | "$PYTHON" -c "$_DISPLAY_SCRIPT" || true
+    "$PYTHON" -c "$_TOK_SCRIPT" < "$capfile" > "$tokfile" 2>/dev/null || echo 0 > "$tokfile"
+  )
   rm -f "$capfile"
+  _LAST_TOKENS=$(cat "$tokfile" 2>/dev/null || echo 0)
+  rm -f "$tokfile"
 }
 
 _rebuild_graph() {
