@@ -134,6 +134,17 @@ def extract_keywords(content: str, ext: str) -> list[str]:
         for m in re.finditer(r"^func\s+(?:\([^)]+\)\s+)?([A-Z]\w*)", content, re.MULTILINE):
             add_name(m.group(1))
 
+    if ext == ".swift":
+        # class/struct/enum/protocol/actor FooBar
+        for m in re.finditer(r"^(?:public\s+|private\s+|internal\s+|open\s+|final\s+)*(?:class|struct|enum|protocol|actor|extension)\s+([A-Za-z_]\w*)", content, re.MULTILINE):
+            add_name(m.group(1))
+        # func fooBar / mutating func / static func
+        for m in re.finditer(r"^(?:\s*)(?:public\s+|private\s+|internal\s+|open\s+|static\s+|class\s+|mutating\s+|override\s+)*func\s+([A-Za-z_]\w*)", content, re.MULTILINE):
+            add_name(m.group(1))
+        # var/let declarations at top level: var paymentStatus
+        for m in re.finditer(r"^\s*(?:@\w+\s+)*(?:public\s+|private\s+|internal\s+)?(?:var|let)\s+([A-Za-z_]\w*)", content, re.MULTILINE):
+            add_name(m.group(1))
+
     # ── Docstring / file-level comment (first meaningful line) ────────────────
     # Python: """...""" at file top
     doc_m = re.match(r'\s*"""([^"]{10,200})', content)
@@ -172,6 +183,7 @@ def should_scan(path: Path) -> bool:
         ".jsx",
         ".ts",
         ".tsx",
+        ".swift",
         ".json",
         ".yaml",
         ".yml",
@@ -213,8 +225,13 @@ def parse_relations(path: Path, text: str, root: Path) -> list[dict]:
     for match in re.finditer(r'^\s*from\s+([a-zA-Z0-9_\.]+)\s+import\s+', text, flags=re.MULTILINE):
         edges.append({"from": rel(path, root), "to": match.group(1), "rel": "imports"})
 
+    # Swift imports.
+    if path.suffix == ".swift":
+        for match in re.finditer(r'^import\s+([A-Za-z_]\w*)', text, flags=re.MULTILINE):
+            edges.append({"from": rel(path, root), "to": match.group(1), "rel": "imports"})
+
     # Rough in-repo path references.
-    for match in re.finditer(r'([A-Za-z0-9_\-\/]+\.(go|py|ts|tsx|js|jsx|md|json|yaml|yml))', text):
+    for match in re.finditer(r'([A-Za-z0-9_\-\/]+\.(go|py|ts|tsx|js|jsx|swift|md|json|yaml|yml))', text):
         candidate = match.group(1)
         if "/" in candidate:
             edges.append({"from": rel(path, root), "to": candidate, "rel": "references"})
