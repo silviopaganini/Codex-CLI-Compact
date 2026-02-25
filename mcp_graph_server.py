@@ -133,11 +133,15 @@ def _local_chat_fix(query: str, top_files: int, top_edges: int) -> dict[str, Any
 def _is_local_file_ref(value: str) -> bool:
     if not value:
         return False
-    if value.startswith("@") or ":" in value:
+    if value.startswith("@"):
         return False
-    if "/" not in value:
+    # Strip symbol suffix (e.g. "src/auth.ts::handleLogin" → "src/auth.ts")
+    file_part = value.split("::")[0] if "::" in value else value
+    if ":" in file_part:  # URL-like (http:, C:\)
         return False
-    return "." in value.split("/")[-1]
+    if "/" not in file_part:
+        return False
+    return "." in file_part.split("/")[-1]
 
 
 def _est_tokens(text: str) -> int:
@@ -461,21 +465,12 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
                 }
             )
         reuse.sort(key=lambda x: (-x["overlap"], -x["cached_tokens_est"], x["file"]))
-        out["reuse_candidates"] = reuse[:8]
+        out["reuse_candidates"] = reuse[:3]
         TURN_STATE["reuse_gate_candidates"] = [r["file"] for r in reuse[:3]]
         TURN_STATE["reuse_gate_satisfied"] = False
         out["read_budget"] = {
-            "hard_max_read_chars": HARD_MAX_READ_CHARS,
-            "turn_read_budget_chars": TURN_READ_BUDGET_CHARS,
-            "used_chars": int(TURN_STATE.get("used_chars", 0)),
             "remaining_chars": max(0, TURN_READ_BUDGET_CHARS - int(TURN_STATE.get("used_chars", 0))),
-            "reuse_gate_enabled": ENFORCE_REUSE_GATE,
             "reuse_gate_candidates": TURN_STATE.get("reuse_gate_candidates", []),
-            "reuse_gate_satisfied": bool(TURN_STATE.get("reuse_gate_satisfied", False)),
-            "single_retrieve_enabled": ENFORCE_SINGLE_RETRIEVE,
-            "retrieve_count": int(TURN_STATE.get("retrieve_count", 0)),
-            "fallback_calls": int(TURN_STATE.get("fallback_calls", 0)),
-            "fallback_max_calls": FALLBACK_MAX_CALLS_PER_TURN,
         }
         TURN_STATE["retrieve_count"] = int(TURN_STATE.get("retrieve_count", 0)) + 1
         TURN_STATE["last_retrieve_out"] = dict(out)
@@ -508,8 +503,10 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         requested = max(256, int(max_chars or 0))
         max_chars = min(requested, HARD_MAX_READ_CHARS)
         qterms = _query_terms(query)
+        # For file::symbol notation, also accept the base file in the allowlist.
+        file_base = file.split("::")[0] if "::" in file else file
         retrieved_files = set(TURN_STATE.get("retrieved_files", []))
-        if ENFORCE_READ_ALLOWLIST and retrieved_files and file not in retrieved_files:
+        if ENFORCE_READ_ALLOWLIST and retrieved_files and file not in retrieved_files and file_base not in retrieved_files:
             payload = {
                 "file": file,
                 "requested_chars": requested,
@@ -531,7 +528,7 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         meta = files_meta.get(file, {})
         gate_candidates = list(TURN_STATE.get("reuse_gate_candidates", []))
         gate_satisfied = bool(TURN_STATE.get("reuse_gate_satisfied", False))
-        if ENFORCE_REUSE_GATE and gate_candidates and not gate_satisfied and file not in gate_candidates:
+        if ENFORCE_REUSE_GATE and gate_candidates and not gate_satisfied and file not in gate_candidates and file_base not in gate_candidates:
             payload = {
                 "file": file,
                 "requested_chars": requested,
@@ -611,7 +608,23 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             _log_tool("graph_read", payload)
             return {"ok": True, "file": file, "content": preview, "mode": "dedupe_preview", "already_returned": True}
 
-        tgt = (PROJECT_ROOT / file).resolve()
+        # Handle file::symbol notation — resolve symbol line range from graph.
+        sym_meta = None
+        file_for_fs = file
+        if "::" in file:
+            file_for_fs, _ = file.split("::", 1)
+            graph_json_path = DG_DATA_DIR / "info_graph.json"
+            if graph_json_path.exists():
+                try:
+                    _gdata = json.loads(graph_json_path.read_text(encoding="utf-8"))
+                    for _node in _gdata.get("nodes", []):
+                        if _node.get("id") == file:
+                            sym_meta = _node
+                            break
+                except Exception:
+                    pass
+
+        tgt = (PROJECT_ROOT / file_for_fs).resolve()
         if PROJECT_ROOT not in tgt.parents and tgt != PROJECT_ROOT:
             return {"ok": False, "error": "outside project root"}
         if not tgt.exists() or not tgt.is_file():
@@ -623,7 +636,7 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
                 try:
                     gdata = json.loads(graph_json.read_text(encoding="utf-8"))
                     for node in gdata.get("nodes", []):
-                        if node.get("path") == file and node.get("content"):
+                        if node.get("path") == file_for_fs and node.get("content"):
                             text = node["content"]
                             break
                 except Exception:
@@ -633,6 +646,13 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         else:
             text = tgt.read_text(encoding="utf-8", errors="ignore")
         mode = "full"
+        # If symbol notation matched, extract only the symbol's lines.
+        if sym_meta:
+            _lines = text.splitlines()
+            _start = int(sym_meta.get("line_start", 0))
+            _end = min(int(sym_meta.get("line_end", len(_lines) - 1)), len(_lines) - 1)
+            text = "\n".join(_lines[_start:_end + 1])
+            mode = "symbol_excerpt"
         if anchor:
             i = text.lower().find(anchor.lower())
             if i >= 0:
@@ -795,9 +815,11 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         graph_json = DG_DATA_DIR / "info_graph.json"
         graph_missing = not graph_json.exists()
         graph_empty = False
+        gdata: dict[str, Any] = {}
         if not graph_missing:
             try:
-                graph_empty = json.loads(graph_json.read_text(encoding="utf-8")).get("node_count", 0) == 0
+                gdata = json.loads(graph_json.read_text(encoding="utf-8"))
+                graph_empty = gdata.get("node_count", 0) == 0
             except Exception:
                 graph_empty = True
         if graph_missing or graph_empty:
@@ -809,16 +831,16 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
                 "query": query,
                 "graph_builder": gb_script,
                 "ingest_url": ingest_url,
-                "instruction": (
-                    "No project scanned yet. Do these steps in order:\n"
-                    "1. Ask the user: 'Which directory should I scan? (default: current working directory)'\n"
-                    "2. If they say 'current' or press Enter, run `pwd` to get the path.\n"
-                    "3. Build the graph locally by running this shell command:\n"
-                    f"   python3 {gb_script} --root <project_path> --out /tmp/dg_graph.json\n"
-                    "4. Upload it to the server:\n"
-                    f"   curl -s -X POST {ingest_url} -H 'Content-Type: application/json' --data-binary @/tmp/dg_graph.json\n"
-                    "5. Call graph_continue again with the original query."
-                ),
+            }
+
+        # Phase 0: Skip graph for small projects — not enough signal to be useful.
+        file_count = gdata.get("file_count", gdata.get("node_count", 0))
+        if file_count < 20:
+            return {
+                "ok": True,
+                "skip": True,
+                "file_count": file_count,
+                "reason": "small project — explore directly without graph tools",
             }
 
         hist = _search_action_history(query, limit=limit)
@@ -839,10 +861,6 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
                 "max_supplementary_files": 0,
                 "query": query,
                 "recommended_files": rec,
-                "instruction": (
-                    "confidence=high: Use graph_read on recommended_files only. "
-                    "Do NOT grep or explore further."
-                ),
             }
             _log_tool("graph_continue", {"query": query, "mode": "memory_first", "recommended_files": rec})
             _record_action("continue_memory_first", {"query": query, "recommended_files": rec})
@@ -860,25 +878,14 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             confidence = "high"
             max_supp_greps = 0
             max_supp_files = 0
-            supp_note = "Do NOT grep or explore further."
         elif top_score >= 4:
             confidence = "medium"
             max_supp_greps = 2
             max_supp_files = 2
-            supp_note = (
-                f"If recommended files are insufficient after reading, you MAY call "
-                f"fallback_rg at most {max_supp_greps} time(s) with specific terms, "
-                f"then graph_read at most {max_supp_files} additional file(s). Then stop."
-            )
         else:
             confidence = "low"
             max_supp_greps = 3
             max_supp_files = 3
-            supp_note = (
-                f"Graph confidence is low. Call fallback_rg at most {max_supp_greps} time(s) "
-                f"with specific terms, then graph_read at most {max_supp_files} file(s). "
-                f"Do NOT do broad recursive exploration."
-            )
 
         out = {
             "ok": True,
@@ -888,7 +895,6 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             "max_supplementary_files": max_supp_files,
             "query": query,
             "recommended_files": rec_files[: min(3, len(rec_files))],
-            "instruction": f"confidence={confidence}: Read recommended_files first. {supp_note}",
         }
         _log_tool("graph_continue", {"query": query, "mode": "retrieve_then_read", "confidence": confidence, "recommended_files": out["recommended_files"]})
         _record_action("continue_retrieve", {"query": query, "recommended_files": out["recommended_files"]})
