@@ -100,13 +100,33 @@ def _get(path: str) -> dict[str, Any]:
         return json.loads(resp.read().decode("utf-8"))
 
 
+# Module-level cache for info graph and symbol index, keyed by file mtime.
+# Avoids re-parsing MB-sized JSON on every tool call.
+_INFO_GRAPH_CACHE: dict[str, Any] | None = None
+_INFO_GRAPH_MTIME: int = -1
+_SYMBOL_INDEX_CACHE: dict[str, Any] | None = None
+_SYMBOL_INDEX_MTIME: int = -1
+
+
 def _local_info_graph() -> dict[str, Any] | None:
-    """Read the info-graph from local DG_DATA_DIR without HTTP. Returns None if unavailable."""
+    """Read the info-graph from local DG_DATA_DIR without HTTP. Returns None if unavailable.
+    Results are cached in memory and invalidated when the file mtime changes."""
+    global _INFO_GRAPH_CACHE, _INFO_GRAPH_MTIME  # noqa: PLW0603
     graph_json = DG_DATA_DIR / "info_graph.json"
     if not graph_json.exists():
         return None
     try:
-        return json.loads(graph_json.read_text(encoding="utf-8"))
+        current_mtime = int(graph_json.stat().st_mtime_ns)
+        if _INFO_GRAPH_CACHE is not None and current_mtime == _INFO_GRAPH_MTIME:
+            return _INFO_GRAPH_CACHE
+        data = json.loads(graph_json.read_text(encoding="utf-8"))
+        # Strip content from file nodes — retrieval doesn't use it, saves RAM.
+        # Railway-mode graph_read reads info_graph.json directly (separate path).
+        for node in data.get("nodes", []):
+            node.pop("content", None)
+        _INFO_GRAPH_CACHE = data
+        _INFO_GRAPH_MTIME = current_mtime
+        return data
     except Exception:
         return None
 
@@ -129,10 +149,18 @@ def _build_symbol_index(graph: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load_symbol_index() -> dict[str, Any]:
+    """Load symbol index with in-memory caching keyed by file mtime."""
+    global _SYMBOL_INDEX_CACHE, _SYMBOL_INDEX_MTIME  # noqa: PLW0603
     if not SYMBOL_INDEX_FILE.exists():
         return {}
     try:
-        return json.loads(SYMBOL_INDEX_FILE.read_text(encoding="utf-8"))
+        current_mtime = int(SYMBOL_INDEX_FILE.stat().st_mtime_ns)
+        if _SYMBOL_INDEX_CACHE is not None and current_mtime == _SYMBOL_INDEX_MTIME:
+            return _SYMBOL_INDEX_CACHE
+        data = json.loads(SYMBOL_INDEX_FILE.read_text(encoding="utf-8"))
+        _SYMBOL_INDEX_CACHE = data
+        _SYMBOL_INDEX_MTIME = current_mtime
+        return data
     except Exception:
         return {}
 
@@ -1030,13 +1058,16 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
             "fallback_calls": 0,
         })
 
-        _log_tool("graph_scan", {"project_root": str(root), "nodes": graph["node_count"], "edges": graph["edge_count"]})
+        file_count = graph.get("file_count", graph["node_count"])
+        symbol_count = graph.get("symbol_count", 0)
+        _log_tool("graph_scan", {"project_root": str(root), "files": file_count, "symbols": symbol_count, "edges": graph["edge_count"]})
         return {
             "ok": True,
             "project_root": str(root),
-            "node_count": graph["node_count"],
+            "file_count": file_count,
+            "symbol_count": symbol_count,
             "edge_count": graph["edge_count"],
-            "message": "Graph built. Action graph and caches reset. Use graph_continue or graph_retrieve to query.",
+            "message": "Graph built. Use graph_continue or graph_retrieve to query.",
         }
 
     return mcp
