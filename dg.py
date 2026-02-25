@@ -363,7 +363,8 @@ def retrieve(graph: dict, query: str, top_files: int, top_edges: int) -> Retriev
             if node_id in seen_file_bases:
                 continue  # a symbol from this file scored higher — skip the file node
             seen_file_bases.add(node_id)
-        row = dict(n)
+        # Strip content — file content must come via graph_read, not retrieve.
+        row = {k: v for k, v in n.items() if k != "content"}
         row["_score"] = s
         row["_role"] = node_role(str(row.get("id", "")), str(row.get("ext", "")))
         row["_intent"] = intent

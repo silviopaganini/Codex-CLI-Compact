@@ -1010,9 +1010,9 @@ def build_server(host: str = "0.0.0.0", port: int = 8080) -> Any:
         PROJECT_ROOT = root
 
         # ── Reset all project-specific state ─────────────────────────────────
-        # Retrieval cache + symbol index: stale from old project.
+        # Retrieval cache: scores are stale from the old project.
+        # Symbol index was already written above — do NOT delete it here.
         RETRIEVAL_CACHE_FILE.unlink(missing_ok=True)
-        SYMBOL_INDEX_FILE.unlink(missing_ok=True)
 
         # Action graph: file reads/edits belong to the old project.
         _save_action_graph({"nodes": [], "edges": [], "files": {}, "actions": []})
