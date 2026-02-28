@@ -43,12 +43,13 @@ URL_GRAPH=$(get_url graph_builder)
 URL_LAUNCH=$(get_url dual_graph_launch)
 URL_DG=$(get_url dg)
 
-# Fallback to public GitHub if server returned empty URLs
+# Fallback to Cloudflare R2 if server returned empty URLs
+R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
-[[ -z "$URL_MCP"    ]] && URL_MCP="$BASE_URL/core/mcp_graph_server.py"
-[[ -z "$URL_GRAPH"  ]] && URL_GRAPH="$BASE_URL/core/graph_builder.py"
-[[ -z "$URL_LAUNCH" ]] && URL_LAUNCH="$BASE_URL/core/dual_graph_launch.sh"
-[[ -z "$URL_DG"     ]] && URL_DG="$BASE_URL/core/dg.py"
+[[ -z "$URL_MCP"    ]] && URL_MCP="$R2/mcp_graph_server.py"
+[[ -z "$URL_GRAPH"  ]] && URL_GRAPH="$R2/graph_builder.py"
+[[ -z "$URL_LAUNCH" ]] && URL_LAUNCH="$R2/dual_graph_launch.sh"
+[[ -z "$URL_DG"     ]] && URL_DG="$R2/dg.py"
 
 # ── Download core engine ──────────────────────────────────────────────────────
 echo "[install] Downloading core engine..."

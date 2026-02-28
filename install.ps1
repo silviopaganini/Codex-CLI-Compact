@@ -34,11 +34,12 @@ if (-not $resp.ok) {
 }
 
 # ── Get file URLs from response ───────────────────────────────────────────────
+$R2     = "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 $files  = $resp.files
-$URL_MCP    = if ($files.mcp_graph_server)  { $files.mcp_graph_server }  else { "$BASE_URL/core/mcp_graph_server.py" }
-$URL_GRAPH  = if ($files.graph_builder)     { $files.graph_builder }     else { "$BASE_URL/core/graph_builder.py" }
-$URL_LAUNCH = if ($files.dual_graph_launch) { $files.dual_graph_launch } else { "$BASE_URL/core/dual_graph_launch.sh" }
-$URL_DG     = if ($files.dg)               { $files.dg }                else { "$BASE_URL/core/dg.py" }
+$URL_MCP    = if ($files.mcp_graph_server)  { $files.mcp_graph_server }  else { "$R2/mcp_graph_server.py" }
+$URL_GRAPH  = if ($files.graph_builder)     { $files.graph_builder }     else { "$R2/graph_builder.py" }
+$URL_LAUNCH = if ($files.dual_graph_launch) { $files.dual_graph_launch } else { "$R2/dual_graph_launch.sh" }
+$URL_DG     = if ($files.dg)               { $files.dg }                else { "$R2/dg.py" }
 
 # ── Download core engine ──────────────────────────────────────────────────────
 Write-Host "[install] Downloading core engine..."

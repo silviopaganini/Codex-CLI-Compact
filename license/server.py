@@ -41,8 +41,11 @@ SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", SMTP_USER)
 
-# File URLs (Cloudflare R2 or any CDN — set when you move to paid mode)
-CORE_FILES_BASE = os.environ.get("CORE_FILES_BASE", "")  # e.g. https://pub-xxx.r2.dev/dual-graph
+# File URLs — served from Cloudflare R2 (private core files)
+CORE_FILES_BASE = os.environ.get(
+    "CORE_FILES_BASE",
+    "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
+)
 
 DB_PATH = Path(os.environ.get("DB_PATH", "/data/licenses.db"))
 # ─────────────────────────────────────────────────────────────────────────────
@@ -227,22 +230,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
     def _file_urls(self) -> dict:
-        """Return download URLs for core files."""
-        if CORE_FILES_BASE:
-            base = CORE_FILES_BASE.rstrip("/")
-            return {
-                "mcp_graph_server": f"{base}/mcp_graph_server.py",
-                "graph_builder":    f"{base}/graph_builder.py",
-                "dual_graph_launch": f"{base}/dual_graph_launch.sh",
-                "dg":               f"{base}/dg.py",
-            }
-        # Fallback to public GitHub (free mode / not yet migrated)
-        base = "https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
+        """Return download URLs for core files (served from Cloudflare R2)."""
+        base = CORE_FILES_BASE.rstrip("/")
         return {
-            "mcp_graph_server":  f"{base}/core/mcp_graph_server.py",
-            "graph_builder":     f"{base}/core/graph_builder.py",
-            "dual_graph_launch": f"{base}/core/dual_graph_launch.sh",
-            "dg":                f"{base}/core/dg.py",
+            "mcp_graph_server":  f"{base}/mcp_graph_server.py",
+            "graph_builder":     f"{base}/graph_builder.py",
+            "dual_graph_launch": f"{base}/dual_graph_launch.sh",
+            "dg":                f"{base}/dg.py",
         }
 
     def read_body(self) -> dict:
