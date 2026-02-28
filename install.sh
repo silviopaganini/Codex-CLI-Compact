@@ -16,10 +16,8 @@ curl -sSL "$BASE_URL/core/dual_graph_launch.sh" -o "$INSTALL_DIR/dual_graph_laun
 curl -sSL "$BASE_URL/core/dg.py"                -o "$INSTALL_DIR/dg.py"
 
 echo "[install] Downloading CLI tools..."
-curl -sSL "$BASE_URL/bin/dgc"       -o "$INSTALL_DIR/dgc"       && chmod +x "$INSTALL_DIR/dgc"
-curl -sSL "$BASE_URL/bin/dg"        -o "$INSTALL_DIR/dg"        && chmod +x "$INSTALL_DIR/dg"
-curl -sSL "$BASE_URL/bin/dgc-bench" -o "$INSTALL_DIR/dgc-bench" && chmod +x "$INSTALL_DIR/dgc-bench"
-curl -sSL "$BASE_URL/bin/dg-bench"  -o "$INSTALL_DIR/dg-bench"  && chmod +x "$INSTALL_DIR/dg-bench"
+curl -sSL "$BASE_URL/bin/dgc" -o "$INSTALL_DIR/dgc" && chmod +x "$INSTALL_DIR/dgc"
+curl -sSL "$BASE_URL/bin/dg"  -o "$INSTALL_DIR/dg"  && chmod +x "$INSTALL_DIR/dg"
 
 echo "[install] Creating Python venv at $VENV ..."
 python3 -m venv "$VENV"

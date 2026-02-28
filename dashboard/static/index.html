@@ -79,12 +79,11 @@
           <label>Tokenizer
             <select id="tokenizer-provider">
               <option value="heuristic">heuristic (chars/4)</option>
-              <option value="openai">openai usage API</option>
               <option value="anthropic">anthropic count_tokens API</option>
             </select>
           </label>
           <label>Model
-            <input id="tokenizer-model" type="text" value="claude-3-5-sonnet-latest" />
+            <input id="tokenizer-model" type="text" value="claude-sonnet-4-6" />
           </label>
         </div>
         <form id="token-form">
@@ -105,7 +104,7 @@
           </label>
           <button type="submit">Record Token Event</button>
         </form>
-        <p class="muted">Uses selected tokenizer provider. OpenAI mode needs `OPENAI_API_KEY`. Anthropic mode needs `ANTHROPIC_API_KEY`.</p>
+        <p class="muted">Anthropic mode needs <code>ANTHROPIC_API_KEY</code> set on the server.</p>
       </article>
     </section>
 
@@ -139,98 +138,13 @@
 
     <section class="card">
       <h2>Information Graph Tree</h2>
-      <p class="muted">All file connections in tree format (`source -> relation -> target`).</p>
+      <p class="muted">All file connections in tree format (<code>source -> relation -> target</code>).</p>
       <pre id="graph-tree" class="tree-view"></pre>
     </section>
 
     <section class="card">
-      <h2>Context Comparison Simulator</h2>
-      <p class="muted">Compare estimated token usage between Claude-style broad context and compact information-graph retrieval.</p>
-      <form id="compare-form">
-        <label>Current Request
-          <textarea id="compare-request" rows="3" placeholder="e.g. Update checkout validation and keep pricing intact." required></textarea>
-        </label>
-        <label>Chat History (paste recent/full conversation)
-          <textarea id="compare-chat" rows="6" placeholder="Paste transcript used in baseline prompting..." required></textarea>
-        </label>
-        <label>Keywords (comma-separated)
-          <input id="compare-keywords" type="text" value="pricing,checkout,billing,auth,api" />
-        </label>
-        <div class="row">
-          <button type="submit">Generate Comparison</button>
-          <button type="button" id="log-compare-btn">Log Both to Token Events</button>
-        </div>
-      </form>
-      <div class="stats">
-        <div><span>Claude-Style Tokens</span><strong id="cmp-baseline-tokens">-</strong></div>
-        <div><span>Info-Graph Tokens</span><strong id="cmp-graph-tokens">-</strong></div>
-        <div><span>Reduction</span><strong id="cmp-reduction">-</strong></div>
-      </div>
-      <div class="grid">
-        <article class="card">
-          <h3>Claude-Style Context</h3>
-          <textarea id="cmp-baseline-context" rows="12" readonly></textarea>
-        </article>
-        <article class="card">
-          <h3>Info-Graph Context</h3>
-          <textarea id="cmp-graph-context" rows="12" readonly></textarea>
-        </article>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>10-Query Benchmark</h2>
-      <p class="muted">Run side-by-side benchmark in UI and inspect quality/token leaderboard.</p>
-      <div class="row">
-        <label>Token Provider
-          <select id="bench-token-provider">
-            <option value="heuristic">heuristic</option>
-            <option value="openai">openai</option>
-          </select>
-        </label>
-        <label>Model
-          <input id="bench-model" type="text" value="gpt-5-mini" />
-        </label>
-        <label>Output Mode
-          <select id="bench-real-output">
-            <option value="false">synthetic outputs</option>
-            <option value="true">real model outputs</option>
-          </select>
-        </label>
-        <button id="run-bench-btn">Run Benchmark</button>
-      </div>
-      <div class="stats">
-        <div><span>Avg Baseline Tokens</span><strong id="bench-avg-base">-</strong></div>
-        <div><span>Avg Graph Tokens</span><strong id="bench-avg-graph">-</strong></div>
-        <div><span>Avg Reduction</span><strong id="bench-avg-reduction">-</strong></div>
-        <div><span>Avg Quality Delta</span><strong id="bench-quality-delta">-</strong></div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Query</th>
-              <th>Base Tok</th>
-              <th>Graph Tok</th>
-              <th>Reduction</th>
-              <th>Base Q</th>
-              <th>Graph Q</th>
-              <th>Delta</th>
-            </tr>
-          </thead>
-          <tbody id="bench-table"></tbody>
-        </table>
-      </div>
-      <details class="bench-details">
-        <summary>Per-Query Side-by-Side Outputs</summary>
-        <div id="bench-outputs"></div>
-      </details>
-    </section>
-
-    <section class="card">
       <h2>Fix Chat (Graph + Grep)</h2>
-      <p class="muted">Ask what fix you need. Assistant uses information graph + `rg` search and returns focused guidance.</p>
+      <p class="muted">Ask what fix you need. Returns focused file recommendations using the information graph.</p>
       <div id="fix-chat-log" class="chat-log"></div>
       <form id="fix-chat-form" class="chat-form">
         <label>Your fix request
@@ -240,26 +154,6 @@
           <button type="submit">Send</button>
         </div>
       </form>
-      <div class="row">
-        <label>Real Codex Tokens (for A/B compare)
-          <input id="fix-codex-tokens" type="number" min="0" value="0" />
-        </label>
-        <label>Fix Model
-          <input id="fix-model" type="text" value="gpt-5-mini" />
-        </label>
-        <label>Validate after fix
-          <select id="fix-validate">
-            <option value="1" selected>Yes</option>
-            <option value="0">No</option>
-          </select>
-        </label>
-        <label>Validation command (optional)
-          <input id="fix-check-cmd" type="text" placeholder="e.g. npm run build" />
-        </label>
-        <button id="fix-dry-run-btn" type="button">Dry Run Fix</button>
-        <button id="fix-apply-btn" type="button">Apply Fix</button>
-      </div>
-      <div id="fix-run-result" class="bench-box"></div>
     </section>
   </main>
 

@@ -18,8 +18,21 @@ VENV="$SCRIPT_DIR/venv"
 PROJECT="${1:-$(pwd)}"
 PROJECT="$(cd "$PROJECT" && pwd)"
 PROMPT="${2:-}"
-MCP_PORT="${DG_MCP_PORT:-8080}"
 DATA_DIR="$PROJECT/.dual-graph"
+
+# Find a free port starting at 8080 (or use DG_MCP_PORT if set)
+if [[ -n "${DG_MCP_PORT:-}" ]]; then
+  MCP_PORT="$DG_MCP_PORT"
+else
+  MCP_PORT=8080
+  while lsof -ti :"$MCP_PORT" >/dev/null 2>&1; do
+    MCP_PORT=$((MCP_PORT + 1))
+    if [[ $MCP_PORT -gt 8099 ]]; then
+      echo "[$TOOL_LABEL] Error: no free port found in range 8080-8099" >&2
+      exit 1
+    fi
+  done
+fi
 
 if [[ "$ASSISTANT" == "codex" ]]; then
   TOOL_LABEL="dg"
@@ -258,11 +271,8 @@ echo "[$TOOL_LABEL] Scanning project..."
 echo "[$TOOL_LABEL] Scan complete."
 echo ""
 
-EXISTING_PID=$(lsof -ti :"$MCP_PORT" 2>/dev/null || true)
-if [[ -n "$EXISTING_PID" ]]; then
-  kill "$EXISTING_PID" 2>/dev/null || true
-  sleep 0.5
-fi
+echo "[$TOOL_LABEL] Port    : $MCP_PORT"
+echo ""
 
 nohup env \
   DG_DATA_DIR="$DATA_DIR" \

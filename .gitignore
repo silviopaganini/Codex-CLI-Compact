@@ -13,6 +13,10 @@ comparison/
 # Node
 node_modules/
 
+# Secrets — never commit
+.env
+.env.*
+
 # macOS
 .DS_Store
 
