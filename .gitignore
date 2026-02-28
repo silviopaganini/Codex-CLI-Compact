@@ -6,9 +6,20 @@ venv/
 
 # Data (never commit user data)
 data/
+!data/.gitkeep
 *.jsonl
 bench_log.jsonl
 comparison/
+
+# Old root-level files (moved to dashboard/)
+/server.py
+/static/
+
+# Core engine (now in private repo)
+/core/
+
+# Local venvs
+.venv-mcp/
 
 # Node
 node_modules/
