@@ -327,7 +327,8 @@ nohup env \
   >> "$DATA_DIR/mcp_server.log" 2>&1 &
 MCP_PID=$!
 echo "$MCP_PID" > "$DATA_DIR/mcp_server.pid"
-trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid"' EXIT INT TERM
+echo "$MCP_PORT" > "$DATA_DIR/mcp_port"
+trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"' EXIT INT TERM
 
 echo "[$TOOL_LABEL] Waiting for MCP server..."
 for i in $(seq 1 20); do
@@ -339,6 +340,33 @@ done
 
 echo "[$TOOL_LABEL] MCP server ready on port $MCP_PORT (PID $MCP_PID)."
 echo ""
+
+# ── Context hooks (Claude only) ────────────────────────────────────────────────
+# Writes SessionStart + PreCompact hooks so graph context survives auto-compaction.
+if [[ "$ASSISTANT" == "claude" ]]; then
+  cat > "$DATA_DIR/prime.sh" << PRIMEEOF
+#!/usr/bin/env bash
+PORT=\$(cat "$DATA_DIR/mcp_port" 2>/dev/null || echo $MCP_PORT)
+curl -sf "http://localhost:\$PORT/prime" 2>/dev/null || true
+PRIMEEOF
+  chmod +x "$DATA_DIR/prime.sh"
+
+  mkdir -p "$PROJECT/.claude"
+  cat > "$PROJECT/.claude/settings.local.json" << SETTINGSEOF
+{
+  "hooks": {
+    "SessionStart": [
+      {"matcher": "", "hooks": [{"type": "command", "command": "$DATA_DIR/prime.sh"}]}
+    ],
+    "PreCompact": [
+      {"matcher": "", "hooks": [{"type": "command", "command": "$DATA_DIR/prime.sh"}]}
+    ]
+  }
+}
+SETTINGSEOF
+  echo "[$TOOL_LABEL] Context hooks ready (SessionStart + PreCompact)"
+fi
+# ──────────────────────────────────────────────────────────────────────────────
 
 if [[ "$ASSISTANT" == "codex" ]]; then
   codex mcp remove dual-graph >/dev/null 2>&1 || true
