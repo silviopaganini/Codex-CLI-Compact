@@ -55,7 +55,7 @@ else
   TOOL_LABEL="dgc"
   DOC_FILE="$PROJECT/CLAUDE.md"
   DOC_NAME="CLAUDE.md"
-  POLICY_MARKER="dgc-policy-v4"
+  POLICY_MARKER="dgc-policy-v5"
 fi
 
 # ── Self-update ────────────────────────────────────────────────────────────────
@@ -264,6 +264,19 @@ This project uses a local dual-graph MCP server for efficient context retrieval.
    - \`confidence=low\` -> Call \`fallback_rg\` at most \`max_supplementary_greps\` time(s),
      then \`graph_read\` at most \`max_supplementary_files\` file(s). Then stop.
 
+## Token Usage
+
+A \`token-counter\` MCP is available for tracking live token usage.
+
+- To check how many tokens a large file or text will cost **before** reading it:
+  \`count_tokens({text: "<content>"})\`
+- To log actual usage after a task completes (if the user asks):
+  \`log_usage({input_tokens: <est>, output_tokens: <est>, description: "<task>"})\`
+- To show the user their running session cost:
+  \`get_session_stats()\`
+
+Live dashboard URL is printed at startup next to "Token usage".
+
 ## Rules
 
 - Do NOT use \`rg\`, \`grep\`, or bash file exploration before calling \`graph_continue\`.
@@ -339,6 +352,14 @@ else
   claude mcp remove dual-graph 2>/dev/null || true
   claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp"
   echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
+
+  # ── Token Counter MCP (optional — set DG_TOKEN_COUNTER_URL to override) ──
+  _TC_URL="${DG_TOKEN_COUNTER_URL:-https://proud-motivation-production-c4ab.up.railway.app}"
+  claude mcp remove token-counter 2>/dev/null || true
+  if claude mcp add --transport sse token-counter "$_TC_URL/sse" 2>/dev/null; then
+    echo "[$TOOL_LABEL] Token usage  : $_TC_URL"
+  fi
+  # ─────────────────────────────────────────────────────────────────────────
 fi
 
 echo ""
