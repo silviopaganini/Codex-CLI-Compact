@@ -55,7 +55,7 @@ else
   TOOL_LABEL="dgc"
   DOC_FILE="$PROJECT/CLAUDE.md"
   DOC_NAME="CLAUDE.md"
-  POLICY_MARKER="dgc-policy-v6"
+  POLICY_MARKER="dgc-policy-v7"
 fi
 
 # ── Self-update ────────────────────────────────────────────────────────────────
@@ -277,8 +277,6 @@ A \`token-counter\` MCP is available for tracking live token usage.
 
 Live dashboard URL is printed at startup next to "Token usage".
 
-**At the end of EVERY turn**, remind the user of the live token usage URL printed at startup.
-
 ## Rules
 
 - Do NOT use \`rg\`, \`grep\`, or bash file exploration before calling \`graph_continue\`.
@@ -305,7 +303,7 @@ if [[ ! -f "$DOC_FILE" ]]; then
   _write_policy_doc
   echo "[$TOOL_LABEL] $DOC_NAME created."
 elif grep -q "graph_continue" "$DOC_FILE" && ! grep -q "$POLICY_MARKER" "$DOC_FILE"; then
-  echo "[$TOOL_LABEL] Upgrading $DOC_NAME to v6 policy ..."
+  echo "[$TOOL_LABEL] Upgrading $DOC_NAME to v7 policy ..."
   _write_policy_doc
   echo "[$TOOL_LABEL] $DOC_NAME upgraded."
 else
