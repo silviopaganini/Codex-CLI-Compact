@@ -389,18 +389,10 @@ else
   claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1
   echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
 
-  # ── Token Counter MCP — local stdio via npx (persists to ~/.claude/token-counter/) ──
-  # Dashboard auto-starts at http://localhost:8899 with project/session history.
-  # Override with DG_TOKEN_COUNTER_URL=https://... to use a remote hosted instance instead.
-  if [[ -n "${DG_TOKEN_COUNTER_URL:-}" ]]; then
-    claude mcp remove token-counter >/dev/null 2>&1 || true
-    claude mcp add --transport sse token-counter "${DG_TOKEN_COUNTER_URL}/sse" >/dev/null 2>&1 || true
-    echo "[$TOOL_LABEL] Token counter -> ${DG_TOKEN_COUNTER_URL} (SSE)"
-  else
-    claude mcp remove token-counter >/dev/null 2>&1 || true
-    claude mcp add token-counter -- npx -y token-counter-mcp >/dev/null 2>&1 || true
-    echo "[$TOOL_LABEL] Token counter -> http://localhost:8899 (local, npx)"
-  fi
+  # ── Token Counter MCP (local stdio via npx) ───────────────────────────────
+  claude mcp remove token-counter >/dev/null 2>&1 || true
+  claude mcp add token-counter -- npx -y token-counter-mcp >/dev/null 2>&1 || true
+  echo "[$TOOL_LABEL] Token counter -> http://localhost:8899 (npx token-counter-mcp)"
   # ───────────────────────────────────────────────────────────────────────────
 fi
 
