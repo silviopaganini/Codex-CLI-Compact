@@ -51,6 +51,8 @@ Invoke-WebRequest $URL_DG     -OutFile "$INSTALL_DIR\dg.py"
 Write-Host "[install] Downloading CLI wrappers..."
 Invoke-WebRequest "$BASE_URL/bin/dgc.cmd" -OutFile "$INSTALL_DIR\dgc.cmd"
 Invoke-WebRequest "$BASE_URL/bin/dg.cmd"  -OutFile "$INSTALL_DIR\dg.cmd"
+Invoke-WebRequest "$BASE_URL/bin/dgc.ps1" -OutFile "$INSTALL_DIR\dgc.ps1"
+Invoke-WebRequest "$BASE_URL/bin/dg.ps1"  -OutFile "$INSTALL_DIR\dg.ps1"
 
 Write-Host "[install] Creating Python venv..."
 python -m venv "$INSTALL_DIR\venv"
