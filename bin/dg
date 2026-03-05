@@ -9,17 +9,5 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
-
-# Bootstrap latest wrapper (best effort) so users get updates mid-session without reinstall.
-if [[ -z "${DG_BOOTSTRAP_DONE:-}" ]]; then
-  export DG_BOOTSTRAP_DONE=1
-  _tmp="$(mktemp "${TMPDIR:-/tmp}/dg-bootstrap.XXXXXX")"
-  if curl -fsSL --max-time 3 "$BASE_URL/bin/dg" -o "$_tmp" 2>/dev/null; then
-    chmod +x "$_tmp"
-    exec "$_tmp" "$@"
-  fi
-  rm -f "$_tmp" 2>/dev/null || true
-fi
 
 exec "$SCRIPT_DIR/dual_graph_launch.sh" codex "$@"

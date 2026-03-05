@@ -62,8 +62,20 @@ fi
 _R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 _LOCAL_VER="$(cat "$SCRIPT_DIR/version.txt" 2>/dev/null || echo "0")"
 _REMOTE_VER="$(curl -sf --max-time 3 "$_R2/version.txt" 2>/dev/null || echo "")"
+_NOTICE_FILE="$SCRIPT_DIR/last_update_notice.txt"
 
 if [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
+  _LAST_NOTICE_VER="$(cat "$_NOTICE_FILE" 2>/dev/null || echo "")"
+  if [[ "$_LAST_NOTICE_VER" != "$_REMOTE_VER" ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      echo "[$TOOL_LABEL] New version ($_LOCAL_VER -> $_REMOTE_VER) available. To refresh launcher files run:"
+      echo "[$TOOL_LABEL]   curl -sSL https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.sh | bash"
+    else
+      echo "[$TOOL_LABEL] New version ($_LOCAL_VER -> $_REMOTE_VER) available. To refresh launcher files run:"
+      echo "[$TOOL_LABEL]   curl -sSL https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.sh | bash"
+    fi
+    echo "$_REMOTE_VER" > "$_NOTICE_FILE" 2>/dev/null || true
+  fi
   echo "[$TOOL_LABEL] Update available ($_LOCAL_VER → $_REMOTE_VER) — updating..."
   curl -sSL "$_R2/mcp_graph_server.py"  -o "$SCRIPT_DIR/mcp_graph_server.py"
   curl -sSL "$_R2/graph_builder.py"     -o "$SCRIPT_DIR/graph_builder.py"

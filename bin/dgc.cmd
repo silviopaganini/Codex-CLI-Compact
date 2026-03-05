@@ -10,20 +10,7 @@ set "TOOL=dgc"
 set "POLICY_MARKER=dgc-policy-v9"
 set "R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 set "BASE_URL=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
-
-:: ── Bootstrap latest launcher wrapper (best effort) ─────────────────────────
-if not defined DG_BOOTSTRAP_DONE (
-    set "DG_BOOTSTRAP_DONE=1"
-    set "BOOTSTRAP_CMD=%TEMP%\dgc_bootstrap_%RANDOM%.cmd"
-    powershell -NoProfile -Command ^
-      "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.cmd' -OutFile '%BOOTSTRAP_CMD%' -UseBasicParsing -TimeoutSec 3 } catch {}"
-    if exist "%BOOTSTRAP_CMD%" (
-        call "%BOOTSTRAP_CMD%" %*
-        set "RC=%ERRORLEVEL%"
-        del "%BOOTSTRAP_CMD%" >nul 2>&1
-        exit /b %RC%
-    )
-)
+set "NOTICE_FILE=%DG%\last_update_notice.txt"
 
 if "%~1"=="" (
     set "PROJECT=%CD%"
@@ -50,6 +37,14 @@ set /p REMOTE_VER=<"%TEMP%\dg_remote_ver.txt"
 if defined REMOTE_VER (
   if not "%REMOTE_VER%"=="" (
     if not "%REMOTE_VER%"=="%LOCAL_VER%" (
+      set "LAST_NOTICE_VER="
+      if exist "%NOTICE_FILE%" set /p LAST_NOTICE_VER=<"%NOTICE_FILE%"
+      if not "%LAST_NOTICE_VER%"=="%REMOTE_VER%" (
+        echo [%TOOL%] New version available: %LOCAL_VER% -^> %REMOTE_VER%
+        echo [%TOOL%] To refresh launcher files run:
+        echo [%TOOL%]   irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 ^| iex
+        echo %REMOTE_VER%> "%NOTICE_FILE%"
+      )
       echo [%TOOL%] Update available: %LOCAL_VER% -^> %REMOTE_VER% ... updating
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing"
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing"
