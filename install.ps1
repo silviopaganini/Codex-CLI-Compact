@@ -66,6 +66,6 @@ if ($userPath -notlike "*\.dual-graph*") {
 }
 
 Write-Host ""
-Write-Host "[install] Done! Open a NEW terminal, then per project:"
-Write-Host "  dgc C:\path\to\project   # Claude Code"
-Write-Host "  dg  C:\path\to\project   # Codex CLI"
+Write-Host "[install] Done! Open a NEW terminal, then run:"
+Write-Host "  dgc `"C:\path\to\your\project`"   # Claude Code"
+Write-Host "  dg  `"C:\path\to\your\project`"   # Codex CLI"
