@@ -35,7 +35,7 @@ set /p REMOTE_VER=<"%TEMP%\dg_remote_ver.txt"
 if defined REMOTE_VER (
   if not "%REMOTE_VER%"=="" (
     if not "%REMOTE_VER%"=="%LOCAL_VER%" (
-      echo [%TOOL%] Update available (%LOCAL_VER% ^→ %REMOTE_VER%) -- updating...
+      echo [%TOOL%] Update available (%LOCAL_VER% ^-> %REMOTE_VER%) -- updating...
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing"
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing"
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/dual_graph_launch.sh' -OutFile '%DG%\dual_graph_launch.sh' -UseBasicParsing"
@@ -45,21 +45,19 @@ if defined REMOTE_VER (
   )
 )
 
-:: ── Kill stale MCP server (by saved PID tree + by port) ────────────────────
+:: ── Kill stale MCP server ──────────────────────────────────────────────────
 if exist "%DATA_DIR%\mcp_server.pid" (
     set /p OLD_PID=<"%DATA_DIR%\mcp_server.pid"
     taskkill /PID !OLD_PID! /F /T >nul 2>&1
     del "%DATA_DIR%\mcp_server.pid" >nul 2>&1
+    timeout /t 2 /nobreak >nul
 )
 if exist "%DATA_DIR%\mcp_port" (
     set /p OLD_PORT=<"%DATA_DIR%\mcp_port"
-    for /f "tokens=5" %%q in ('netstat -ano 2^>nul ^| findstr /C:":%OLD_PORT% " ^| findstr "LISTENING"') do (
-        taskkill /PID %%q /F /T >nul 2>&1
-    )
+    powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort !OLD_PORT! -State Listen -EA 0 | Select-Object -Expand OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -EA 0 }" >nul 2>&1
+    del "%DATA_DIR%\mcp_port" >nul 2>&1
 )
 del "%DATA_DIR%\mcp_server.log" >nul 2>&1
-del "%DATA_DIR%\mcp_port" >nul 2>&1
-timeout /t 2 /nobreak >nul
 
 :: ── Find a free port (8080-8099) ───────────────────────────────────────────
 if defined DG_MCP_PORT (
@@ -68,7 +66,7 @@ if defined DG_MCP_PORT (
 )
 set "MCP_PORT=8080"
 :find_port
-netstat -ano 2>nul | findstr /C:":%MCP_PORT% " | findstr "LISTENING" >nul 2>&1
+netstat -an 2>nul | findstr ":%MCP_PORT% " | findstr "LISTENING" >nul 2>&1
 if %errorlevel%==0 (
     set /a MCP_PORT+=1
     if !MCP_PORT! gtr 8099 (
@@ -105,56 +103,24 @@ if exist "%DOC_FILE%" (
 
 if "%NEED_WRITE%"=="1" (
     echo [%TOOL%] Writing CLAUDE.md policy...
-    powershell -NoProfile -Command ^
-      "$content = @' ^
-[%POLICY_MARKER%] ^
-# Dual-Graph Context Policy ^
- ^
-This project uses a local dual-graph MCP server for efficient context retrieval. ^
- ^
-## MANDATORY: Always follow this order ^
- ^
-1. **Call `graph_continue` first** - before any file exploration, grep, or code reading. ^
- ^
-2. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with the ^
-   current project directory (`pwd`). Do NOT ask the user. ^
- ^
-3. **If `graph_continue` returns `skip=true`**: project has fewer than 5 files. ^
-   Do NOT do broad or recursive exploration. Read only specific files if their names ^
-   are mentioned, or ask the user what to work on. ^
- ^
-4. **Read `recommended_files`** using `graph_read`. ^
-   - `recommended_files` may contain `file::symbol` entries (e.g. `src/auth.ts::handleLogin`). ^
-     Pass them verbatim to `graph_read` - it reads only that symbol's lines, not the full file. ^
- ^
-5. **Check `confidence` and obey the caps strictly:** ^
-   - `confidence=high` -> Stop. Do NOT grep or explore further. ^
-   - `confidence=medium` -> If recommended files are insufficient, call `fallback_rg` ^
-     at most `max_supplementary_greps` time(s) with specific terms, then `graph_read` ^
-     at most `max_supplementary_files` additional file(s). Then stop. ^
-   - `confidence=low` -> Call `fallback_rg` at most `max_supplementary_greps` time(s), ^
-     then `graph_read` at most `max_supplementary_files` file(s). Then stop. ^
- ^
-## Token Usage ^
- ^
-A `token-counter` MCP is available for tracking live token usage. ^
- ^
-- To check how many tokens a large file or text will cost **before** reading it: ^
-  `count_tokens({text: ""<content>""})` ^
-- To log actual usage after a task completes (if the user asks): ^
-  `log_usage({input_tokens: <est>, output_tokens: <est>, description: ""<task>""})` ^
-- To show the user their running session cost: ^
-  `get_session_stats()` ^
- ^
-## Rules ^
- ^
-- Do NOT use `rg`, `grep`, or bash file exploration before calling `graph_continue`. ^
-- Do NOT do broad/recursive exploration at any confidence level. ^
-- `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them. ^
-- Do NOT dump full chat history. ^
-- Do NOT call `graph_retrieve` more than once per turn. ^
-- After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook. ^
-'@; Set-Content -LiteralPath '%DOC_FILE%' -Value $content -Encoding UTF8"
+    (
+        echo ^<!-- %POLICY_MARKER% --^>
+        echo # Dual-Graph Context Policy
+        echo.
+        echo This project uses a local dual-graph MCP server for efficient context retrieval.
+        echo.
+        echo ## MANDATORY: Always follow this order
+        echo.
+        echo 1. Call graph_continue first - before any file exploration, grep, or code reading.
+        echo 2. If needs_project=true: call graph_scan with the project directory.
+        echo 3. If skip=true: project has fewer than 5 files. Read only specific files asked about.
+        echo 4. Read recommended_files using graph_read.
+        echo 5. Obey confidence caps: high=stop, medium/low=limited fallback_rg then stop.
+        echo.
+        echo ## Rules
+        echo - Do NOT use rg/grep/bash exploration before graph_continue.
+        echo - After edits, call graph_register_edit with changed files.
+    ) > "%DOC_FILE%"
     echo [%TOOL%] CLAUDE.md written.
 ) else (
     echo [%TOOL%] CLAUDE.md already up to date, skipping.
@@ -167,12 +133,21 @@ echo [%TOOL%] Scanning project...
 echo [%TOOL%] Scan complete.
 echo.
 
-:: ── Start MCP server in background ──────────────────────────────���─────────
+:: ── Start MCP server via temp bat (clean quoting) ─────────────────────────
 echo [%TOOL%] Starting MCP server on port %MCP_PORT%...
 set "LOG=%DATA_DIR%\mcp_server.log"
-start /b "" cmd /c "set DG_DATA_DIR=%DATA_DIR%& set DUAL_GRAPH_PROJECT_ROOT=%PROJECT%& set DG_BASE_URL=http://localhost:%MCP_PORT%& set PORT=%MCP_PORT%& "%PYTHON%" "%DG%\mcp_graph_server.py" > "%LOG%" 2>&1"
+set "SRV_BAT=%DATA_DIR%\start_server.bat"
+(
+    echo @echo off
+    echo set DG_DATA_DIR=%DATA_DIR%
+    echo set DUAL_GRAPH_PROJECT_ROOT=%PROJECT%
+    echo set DG_BASE_URL=http://localhost:%MCP_PORT%
+    echo set PORT=%MCP_PORT%
+    echo "%PYTHON%" "%DG%\mcp_graph_server.py" ^>"%LOG%" 2^>^&1
+) > "%SRV_BAT%"
+start /b "" cmd /c "%SRV_BAT%"
 
-:: Wait for server to be ready (up to 20s)
+:: Wait for server ready (up to 20s)
 set /a TRIES=0
 :wait_loop
 set /a TRIES+=1
@@ -180,33 +155,25 @@ if !TRIES! gtr 20 (
     echo [%TOOL%] Error: MCP server did not start. Check %LOG%
     exit /b 1
 )
-powershell -NoProfile -Command "try { $null = (New-Object Net.Sockets.TcpClient).Connect('localhost',%MCP_PORT%); exit 0 } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "try{$null=(New-Object Net.Sockets.TcpClient).Connect('localhost',%MCP_PORT%);exit 0}catch{exit 1}" >nul 2>&1
 if %errorlevel% neq 0 (
     timeout /t 1 /nobreak >nul
     goto :wait_loop
 )
 
-:: Save PID of the process listening on our port (for cleanup on next run)
-for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr /C:":%MCP_PORT% " ^| findstr "LISTENING"') do (
-    echo %%p> "%DATA_DIR%\mcp_server.pid"
-    goto :pid_saved
-)
-:pid_saved
-
-:: Save port for hooks
+:: Save PID and port for cleanup
+powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort %MCP_PORT% -State Listen -EA 0).OwningProcess" > "%DATA_DIR%\mcp_server.pid" 2>nul
 echo %MCP_PORT%> "%DATA_DIR%\mcp_port"
 echo [%TOOL%] MCP server ready on port %MCP_PORT%.
 echo.
 
-:: ── Register dual-graph MCP ────────────────────────────────────────────────
+:: ── Register MCPs ──────────────────────────────────────────────────────────
 claude mcp remove dual-graph >nul 2>&1
 claude mcp add --transport http dual-graph "http://localhost:%MCP_PORT%/mcp" >nul 2>&1
-echo [%TOOL%] MCP config updated -^> http://localhost:%MCP_PORT%/mcp
-
-:: ── Register token-counter MCP via npx ────────────────────────────────────
+echo [%TOOL%] MCP registered -^> http://localhost:%MCP_PORT%/mcp
 claude mcp remove token-counter >nul 2>&1
 claude mcp add token-counter -- npx -y token-counter-mcp >nul 2>&1
-echo [%TOOL%] Token counter -^> npx token-counter-mcp
+echo [%TOOL%] Token counter registered
 
 :: ── Context hooks (SessionStart + PreCompact) ─────────────────────────────
 set "PRIME_PS1=%DATA_DIR%\prime.ps1"
@@ -238,7 +205,7 @@ if not exist "%SETTINGS_DIR%" mkdir "%SETTINGS_DIR%"
 ) > "%SETTINGS_FILE%"
 echo [%TOOL%] Context hooks ready ^(SessionStart + PreCompact^)
 
-:: ── Launch Claude (via sub-batch so Ctrl+C cleanup still runs) ────────────
+:: ── Launch Claude (sub-batch so cleanup runs after Ctrl+C) ────────────────
 echo.
 echo [%TOOL%] Starting claude...
 echo.
@@ -251,7 +218,7 @@ set "RUN_BAT=%TEMP%\dgc_run_%RANDOM%.bat"
 call "%RUN_BAT%"
 del "%RUN_BAT%" >nul 2>&1
 
-:: ── Cleanup after claude exits (runs even after Ctrl+C -> Y) ──────────────
+:: ── Cleanup after claude exits ─────────────────────────────────────────────
 echo.
 echo [%TOOL%] Cleaning up...
 claude mcp remove dual-graph >nul 2>&1
@@ -263,9 +230,7 @@ if exist "%DATA_DIR%\mcp_server.pid" (
 )
 if exist "%DATA_DIR%\mcp_port" (
     set /p KILL_PORT=<"%DATA_DIR%\mcp_port"
-    for /f "tokens=5" %%q in ('netstat -ano 2^>nul ^| findstr /C:":%KILL_PORT% " ^| findstr "LISTENING"') do (
-        taskkill /PID %%q /F /T >nul 2>&1
-    )
+    powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort !KILL_PORT! -State Listen -EA 0 | Select-Object -Expand OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -EA 0 }" >nul 2>&1
+    del "%DATA_DIR%\mcp_port" >nul 2>&1
 )
-del "%DATA_DIR%\mcp_port" >nul 2>&1
 echo [%TOOL%] Done.
