@@ -105,55 +105,56 @@ if exist "%DOC_FILE%" (
 
 if "%NEED_WRITE%"=="1" (
     echo [%TOOL%] Writing CLAUDE.md policy...
-    (
-        echo [%POLICY_MARKER%]
-        echo # Dual-Graph Context Policy
-        echo.
-        echo This project uses a local dual-graph MCP server for efficient context retrieval.
-        echo.
-        echo ## MANDATORY: Always follow this order
-        echo.
-        echo 1. **Call `graph_continue` first** ^— before any file exploration, grep, or code reading.
-        echo.
-        echo 2. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with the
-        echo    current project directory ^(`pwd`^). Do NOT ask the user.
-        echo.
-        echo 3. **If `graph_continue` returns `skip=true`**: project has fewer than 5 files.
-        echo    Do NOT do broad or recursive exploration. Read only specific files if their names
-        echo    are mentioned, or ask the user what to work on.
-        echo.
-        echo 4. **Read `recommended_files`** using `graph_read`.
-        echo    - `recommended_files` may contain `file::symbol` entries ^(e.g. `src/auth.ts::handleLogin`^).
-        echo      Pass them verbatim to `graph_read` ^— it reads only that symbol's lines, not the full file.
-        echo.
-        echo 5. **Check `confidence` and obey the caps strictly:**
-        echo    - `confidence=high` -^> Stop. Do NOT grep or explore further.
-        echo    - `confidence=medium` -^> If recommended files are insufficient, call `fallback_rg`
-        echo      at most `max_supplementary_greps` time^(s^) with specific terms, then `graph_read`
-        echo      at most `max_supplementary_files` additional file^(s^). Then stop.
-        echo    - `confidence=low` -^> Call `fallback_rg` at most `max_supplementary_greps` time^(s^),
-        echo      then `graph_read` at most `max_supplementary_files` file^(s^). Then stop.
-        echo.
-        echo ## Token Usage
-        echo.
-        echo A `token-counter` MCP is available for tracking live token usage.
-        echo.
-        echo - To check how many tokens a large file or text will cost **before** reading it:
-        echo   `count_tokens^({text: "^<content^>"}^)`
-        echo - To log actual usage after a task completes ^(if the user asks^):
-        echo   `log_usage^({input_tokens: ^<est^>, output_tokens: ^<est^>, description: "^<task^>"}^)`
-        echo - To show the user their running session cost:
-        echo   `get_session_stats^(^)`
-        echo.
-        echo ## Rules
-        echo.
-        echo - Do NOT use `rg`, `grep`, or bash file exploration before calling `graph_continue`.
-        echo - Do NOT do broad/recursive exploration at any confidence level.
-        echo - `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them.
-        echo - Do NOT dump full chat history.
-        echo - Do NOT call `graph_retrieve` more than once per turn.
-        echo - After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation ^(e.g. `src/auth.ts::handleLogin`^) when the edit targets a specific function, class, or hook.
-    ) > "%DOC_FILE%"
+    powershell -NoProfile -Command ^
+      "$content = @' ^
+[%POLICY_MARKER%] ^
+# Dual-Graph Context Policy ^
+ ^
+This project uses a local dual-graph MCP server for efficient context retrieval. ^
+ ^
+## MANDATORY: Always follow this order ^
+ ^
+1. **Call `graph_continue` first** - before any file exploration, grep, or code reading. ^
+ ^
+2. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with the ^
+   current project directory (`pwd`). Do NOT ask the user. ^
+ ^
+3. **If `graph_continue` returns `skip=true`**: project has fewer than 5 files. ^
+   Do NOT do broad or recursive exploration. Read only specific files if their names ^
+   are mentioned, or ask the user what to work on. ^
+ ^
+4. **Read `recommended_files`** using `graph_read`. ^
+   - `recommended_files` may contain `file::symbol` entries (e.g. `src/auth.ts::handleLogin`). ^
+     Pass them verbatim to `graph_read` - it reads only that symbol's lines, not the full file. ^
+ ^
+5. **Check `confidence` and obey the caps strictly:** ^
+   - `confidence=high` -> Stop. Do NOT grep or explore further. ^
+   - `confidence=medium` -> If recommended files are insufficient, call `fallback_rg` ^
+     at most `max_supplementary_greps` time(s) with specific terms, then `graph_read` ^
+     at most `max_supplementary_files` additional file(s). Then stop. ^
+   - `confidence=low` -> Call `fallback_rg` at most `max_supplementary_greps` time(s), ^
+     then `graph_read` at most `max_supplementary_files` file(s). Then stop. ^
+ ^
+## Token Usage ^
+ ^
+A `token-counter` MCP is available for tracking live token usage. ^
+ ^
+- To check how many tokens a large file or text will cost **before** reading it: ^
+  `count_tokens({text: ""<content>""})` ^
+- To log actual usage after a task completes (if the user asks): ^
+  `log_usage({input_tokens: <est>, output_tokens: <est>, description: ""<task>""})` ^
+- To show the user their running session cost: ^
+  `get_session_stats()` ^
+ ^
+## Rules ^
+ ^
+- Do NOT use `rg`, `grep`, or bash file exploration before calling `graph_continue`. ^
+- Do NOT do broad/recursive exploration at any confidence level. ^
+- `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them. ^
+- Do NOT dump full chat history. ^
+- Do NOT call `graph_retrieve` more than once per turn. ^
+- After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook. ^
+'@; Set-Content -LiteralPath '%DOC_FILE%' -Value $content -Encoding UTF8"
     echo [%TOOL%] CLAUDE.md written.
 ) else (
     echo [%TOOL%] CLAUDE.md already up to date, skipping.
