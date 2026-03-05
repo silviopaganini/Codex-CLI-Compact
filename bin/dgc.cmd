@@ -106,7 +106,7 @@ if exist "%DOC_FILE%" (
 if "%NEED_WRITE%"=="1" (
     echo [%TOOL%] Writing CLAUDE.md policy...
     (
-        echo ^<!-- %POLICY_MARKER% --^>
+        echo ^<^!-- %POLICY_MARKER% --^>
         echo # Dual-Graph Context Policy
         echo.
         echo This project uses a local dual-graph MCP server for efficient context retrieval.
