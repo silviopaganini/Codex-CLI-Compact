@@ -21,6 +21,14 @@ set "R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 set "BASE_URL=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 set "NOTICE_FILE=%DG%\last_update_notice.txt"
 
+:: ── Detect install method (Scoop vs direct) ───────────────────────────────
+set "REINSTALL_CMD=irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 | iex"
+if defined SCOOP (
+    if exist "%SCOOP%\shims\dgc.cmd" set "REINSTALL_CMD=scoop update dual-graph"
+) else (
+    if exist "%USERPROFILE%\scoop\shims\dgc.cmd" set "REINSTALL_CMD=scoop update dual-graph"
+)
+
 if "%~1"=="" (
     set "PROJECT=%CD%"
 ) else (
@@ -55,9 +63,9 @@ if defined REMOTE_VER (
         echo %REMOTE_VER%> "%NOTICE_FILE%"
       )
       echo [%TOOL%] Update available: %LOCAL_VER% -^> %REMOTE_VER% ... updating
-      powershell -NoProfile -Command "Invoke-WebRequest '%R2%/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing"
-      powershell -NoProfile -Command "Invoke-WebRequest '%R2%/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing"
-      powershell -NoProfile -Command "Invoke-WebRequest '%R2%/dual_graph_launch.sh' -OutFile '%DG%\dual_graph_launch.sh' -UseBasicParsing"
+      powershell -NoProfile -Command "Invoke-WebRequest '%R2%/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing" >nul 2>&1
+      powershell -NoProfile -Command "Invoke-WebRequest '%R2%/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing" >nul 2>&1
+      powershell -NoProfile -Command "Invoke-WebRequest '%R2%/dual_graph_launch.sh' -OutFile '%DG%\dual_graph_launch.sh' -UseBasicParsing" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.cmd' -OutFile '%DG%\dgc.cmd.new' -UseBasicParsing } catch {}" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dg.cmd' -OutFile '%DG%\dg.cmd.new' -UseBasicParsing } catch {}" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.ps1' -OutFile '%DG%\dgc.ps1' -UseBasicParsing } catch {}" >nul 2>&1
@@ -157,7 +165,7 @@ if "%NEED_WRITE%"=="1" (
         echo Only log things worth remembering across sessions. Log immediately, not at session end.
         echo.
         echo ## Session End
-        echo When user signals done (bye/done/wrap up), update CONTEXT.md: Current Task, Key Decisions (max 3^), Next Steps (max 3^).
+        echo When user signals done ^(bye/done/wrap up^), update CONTEXT.md: Current Task, Key Decisions ^(max 3^), Next Steps ^(max 3^).
         echo Keep CONTEXT.md under 20 lines. Only what is needed to resume next session.
     ) > "%DOC_FILE%"
     echo [%TOOL%] CLAUDE.md written.
@@ -170,6 +178,12 @@ if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%DATA_DIR%\context-store.json" echo []> "%DATA_DIR%\context-store.json"
 echo [%TOOL%] Scanning project...
 "%PYTHON%" "%DG%\graph_builder.py" --root "%PROJECT%" --out "%DATA_DIR%\info_graph.json"
+if errorlevel 1 (
+    echo [%TOOL%] Error: project scan failed.
+    echo [%TOOL%] If this keeps happening, reinstall with:
+    echo [%TOOL%]   %REINSTALL_CMD%
+    exit /b 1
+)
 echo [%TOOL%] Scan complete.
 echo.
 
@@ -193,6 +207,8 @@ set /a TRIES=0
 set /a TRIES+=1
 if !TRIES! gtr 20 (
     echo [%TOOL%] Error: MCP server did not start. Check %LOG%
+    echo [%TOOL%] If this keeps happening, reinstall with:
+    echo [%TOOL%]   %REINSTALL_CMD%
     exit /b 1
 )
 powershell -NoProfile -Command "try{$null=(New-Object Net.Sockets.TcpClient).Connect('localhost',%MCP_PORT%);exit 0}catch{exit 1}" >nul 2>&1
