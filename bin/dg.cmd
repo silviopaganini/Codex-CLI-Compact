@@ -4,6 +4,15 @@
 
 setlocal enabledelayedexpansion
 
+:: ── Apply pending self-update (downloaded by previous run) ────────────────
+if exist "%~f0.new" (
+    move /y "%~f0.new" "%~f0" >nul 2>&1
+    if not errorlevel 1 (
+        call "%~f0" %*
+        exit /b
+    )
+)
+
 set "DG=%USERPROFILE%\.dual-graph"
 set "PYTHON=%DG%\venv\Scripts\python.exe"
 set "TOOL=dg"
@@ -34,8 +43,12 @@ if defined REMOTE_VER (
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing"
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing"
       powershell -NoProfile -Command "Invoke-WebRequest '%R2%/dual_graph_launch.sh' -OutFile '%DG%\dual_graph_launch.sh' -UseBasicParsing"
+      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.cmd' -OutFile '%DG%\dgc.cmd.new' -UseBasicParsing } catch {}" >nul 2>&1
+      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dg.cmd' -OutFile '%DG%\dg.cmd.new' -UseBasicParsing } catch {}" >nul 2>&1
+      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.ps1' -OutFile '%DG%\dgc.ps1' -UseBasicParsing } catch {}" >nul 2>&1
+      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dg.ps1' -OutFile '%DG%\dg.ps1' -UseBasicParsing } catch {}" >nul 2>&1
       echo %REMOTE_VER%> "%DG%\version.txt"
-      echo [%TOOL%] Updated to %REMOTE_VER%.
+      echo [%TOOL%] Updated to %REMOTE_VER%. Launcher will refresh on next run.
     )
   )
 )
