@@ -432,6 +432,18 @@ import json, sys
 settings_file = sys.argv[1]
 prime_cmd = sys.argv[2]
 hook_cmd = f'/bin/bash "{prime_cmd}"'
+stop_hook = (
+    'INPUT=$(cat); '
+    'TRANSCRIPT=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get(\'transcript_path\',\'\'))" 2>/dev/null || echo ""); '
+    'if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]]; then '
+    'CHARS=$(python3 -c "import json; lines=open(\'$TRANSCRIPT\').readlines(); '
+    '[print(len(str(json.loads(l).get(\'message\',{}).get(\'content\',\'\')))) for l in reversed(lines) '
+    'if json.loads(l).get(\'type\') == \'assistant\'" 2>/dev/null | head -1 || echo 0); '
+    'OUT=$((${CHARS:-0}/4)); IN=$((OUT*4)); '
+    'curl -sf -X POST http://localhost:8899/log -H "Content-Type: application/json" '
+    '-d "{\"input_tokens\":$IN,\"output_tokens\":$OUT,\"model\":\"claude-sonnet-4-6\",\"description\":\"auto\"}" >/dev/null 2>&1 || true; '
+    'fi; exit 0'
+)
 payload = {
     "hooks": {
         "SessionStart": [
@@ -439,6 +451,9 @@ payload = {
         ],
         "PreCompact": [
             {"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]}
+        ],
+        "Stop": [
+            {"matcher": "", "hooks": [{"type": "command", "command": f'/bin/bash -c \'{stop_hook}\''}]}
         ],
     }
 }
@@ -463,10 +478,11 @@ else
   claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1
   echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
 
-  # ── Token Counter MCP (local stdio via npx) ───────────────────────────────
+  # ── Token Counter MCP (global user scope — works in all projects) ────────
+  claude mcp remove token-counter --scope user >/dev/null 2>&1 || true
   claude mcp remove token-counter >/dev/null 2>&1 || true
-  claude mcp add token-counter -- npx -y token-counter-mcp >/dev/null 2>&1 || true
-  echo "[$TOOL_LABEL] Token counter -> http://localhost:8899 (npx token-counter-mcp)"
+  claude mcp add --scope user token-counter -- npx -y token-counter-mcp >/dev/null 2>&1 || true
+  echo "[$TOOL_LABEL] Token counter -> http://localhost:8899 (global, npx token-counter-mcp)"
   # ───────────────────────────────────────────────────────────────────────────
 fi
 

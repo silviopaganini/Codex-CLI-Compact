@@ -211,9 +211,10 @@ echo.
 cmd /d /c "claude mcp remove dual-graph" >nul 2>&1
 cmd /d /c "claude mcp add --transport http dual-graph http://localhost:%MCP_PORT%/mcp" >nul 2>&1
 echo [%TOOL%] MCP registered -^> http://localhost:%MCP_PORT%/mcp
+cmd /d /c "claude mcp remove token-counter --scope user" >nul 2>&1
 cmd /d /c "claude mcp remove token-counter" >nul 2>&1
-cmd /d /c "claude mcp add token-counter -- npx -y token-counter-mcp" >nul 2>&1
-echo [%TOOL%] Token counter registered
+cmd /d /c "claude mcp add --scope user token-counter -- npx -y token-counter-mcp" >nul 2>&1
+echo [%TOOL%] Token counter registered (global)
 
 :: ── Context hooks (SessionStart + PreCompact) ─────────────────────────────
 set "PRIME_PS1=%DATA_DIR%\prime.ps1"
@@ -240,10 +241,26 @@ set "SETTINGS_FILE=%SETTINGS_DIR%\settings.local.json"
     echo }
 ) > "%PRIME_PS1%"
 
+set "STOP_PS1=%DATA_DIR%\stop_hook.ps1"
+(
+    echo $input = [Console]::In.ReadToEnd^(^)
+    echo try { $transcript = ^($input ^| ConvertFrom-Json^).transcript_path } catch { $transcript = '' }
+    echo if ^($transcript -and ^(Test-Path $transcript^)^) {
+    echo     try {
+    echo         $lines = Get-Content $transcript -Raw ^| ConvertFrom-Json -AsHashtable -EA 0
+    echo         if ^(-not $lines^) { $lines = ^(Get-Content $transcript^) ^| ForEach-Object { $_ ^| ConvertFrom-Json -EA 0 } ^| Where-Object { $_ } }
+    echo         $last = ^($lines ^| Where-Object { $_.type -eq 'assistant' }^) ^| Select-Object -Last 1
+    echo         $chars = ^([string]^($last.message.content^)^).Length
+    echo         $out = [math]::Max^(1, [int]^($chars / 4^)^); $in = $out * 4
+    echo         Invoke-RestMethod -Method Post -Uri 'http://localhost:8899/log' -ContentType 'application/json' -Body ^("{`"input_tokens`":$in,`"output_tokens`":$out,`"model`":`"claude-sonnet-4-6`",`"description`":`"auto`"}"^) -EA 0 ^| Out-Null
+    echo     } catch {}
+    echo }
+) > "%STOP_PS1%"
+
 if not exist "%SETTINGS_DIR%" mkdir "%SETTINGS_DIR%"
 powershell -NoProfile -Command ^
-  "& { $cmd = 'powershell -NoProfile -File ""%PRIME_PS1%""'; $obj = @{ hooks = @{ SessionStart = @(@{ matcher = ''; hooks = @(@{ type = 'command'; command = $cmd }) }); PreCompact = @(@{ matcher = ''; hooks = @(@{ type = 'command'; command = $cmd }) }) } }; $obj | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath '%SETTINGS_FILE%' -Encoding UTF8 }"
-echo [%TOOL%] Context hooks ready ^(SessionStart + PreCompact^)
+  "& { $prime = 'powershell -NoProfile -File ""%PRIME_PS1%""'; $stop = 'powershell -NoProfile -File ""%STOP_PS1%""'; $obj = @{ hooks = @{ SessionStart = @(@{ matcher = ''; hooks = @(@{ type = 'command'; command = $prime }) }); PreCompact = @(@{ matcher = ''; hooks = @(@{ type = 'command'; command = $prime }) }); Stop = @(@{ matcher = ''; hooks = @(@{ type = 'command'; command = $stop }) }) } }; $obj | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath '%SETTINGS_FILE%' -Encoding UTF8 }"
+echo [%TOOL%] Context hooks ready ^(SessionStart + PreCompact + Stop^)
 
 :: ── Launch Claude (sub-batch so cleanup runs after Ctrl+C) ────────────────
 echo.
