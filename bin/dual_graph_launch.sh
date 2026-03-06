@@ -424,27 +424,47 @@ exit 0
 PRIMEEOF
   chmod +x "$DATA_DIR/prime.sh"
 
+  # Write stop.sh — reads transcript, estimates tokens, POSTs to token counter
+  cat > "$DATA_DIR/stop.sh" << STOPEOF
+#!/usr/bin/env bash
+INPUT=\$(cat)
+TRANSCRIPT=\$(echo "\$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('transcript_path',''))" 2>/dev/null || echo "")
+if [[ -n "\$TRANSCRIPT" && -f "\$TRANSCRIPT" ]]; then
+  CHARS=\$(python3 - "\$TRANSCRIPT" 2>/dev/null << 'PYEOF'
+import json, sys
+lines = open(sys.argv[1]).readlines()
+for line in reversed(lines):
+    try:
+        msg = json.loads(line)
+        if msg.get("type") == "assistant":
+            print(len(str(msg.get("message", {}).get("content", ""))))
+            break
+    except Exception:
+        pass
+PYEOF
+)
+  OUT=\$(( \${CHARS:-0} / 4 ))
+  IN=\$(( OUT * 4 ))
+  PROJECT_PATH="$PROJECT"
+  curl -sf -X POST http://localhost:8899/log \
+    -H "Content-Type: application/json" \
+    -d "{\"input_tokens\":\$IN,\"output_tokens\":\$OUT,\"model\":\"claude-sonnet-4-6\",\"description\":\"auto\",\"project\":\"\$PROJECT_PATH\"}" \
+    >/dev/null 2>&1 || true
+fi
+exit 0
+STOPEOF
+  chmod +x "$DATA_DIR/stop.sh"
+
   mkdir -p "$PROJECT/.claude"
   PRIME_CMD="$DATA_DIR/prime.sh"
   # Write JSON via Python to avoid quoting/escaping issues in paths with spaces.
-  "$PYTHON" - "$PROJECT/.claude/settings.local.json" "$PRIME_CMD" "$PROJECT" <<'PY'
+  "$PYTHON" - "$PROJECT/.claude/settings.local.json" "$PRIME_CMD" "$DATA_DIR/stop.sh" <<'PY'
 import json, sys
 settings_file = sys.argv[1]
 prime_cmd = sys.argv[2]
-project_path = sys.argv[3] if len(sys.argv) > 3 else ""
+stop_cmd = sys.argv[3]
 hook_cmd = f'/bin/bash "{prime_cmd}"'
-stop_hook = (
-    'INPUT=$(cat); '
-    'TRANSCRIPT=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get(\'transcript_path\',\'\'))" 2>/dev/null || echo ""); '
-    'if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]]; then '
-    'CHARS=$(python3 -c "import json; lines=open(\'$TRANSCRIPT\').readlines(); '
-    '[print(len(str(json.loads(l).get(\'message\',{}).get(\'content\',\'\')))) for l in reversed(lines) '
-    'if json.loads(l).get(\'type\') == \'assistant\'" 2>/dev/null | head -1 || echo 0); '
-    'OUT=$((${CHARS:-0}/4)); IN=$((OUT*4)); '
-    'curl -sf -X POST http://localhost:8899/log -H "Content-Type: application/json" '
-    f'-d \'{{"input_tokens":$IN,"output_tokens":$OUT,"model":"claude-sonnet-4-6","description":"auto","project":"{project_path}"}}\' >/dev/null 2>&1 || true; '
-    'fi; exit 0'
-)
+stop_hook_cmd = f'/bin/bash "{stop_cmd}"'
 payload = {
     "hooks": {
         "SessionStart": [
@@ -454,7 +474,7 @@ payload = {
             {"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]}
         ],
         "Stop": [
-            {"matcher": "", "hooks": [{"type": "command", "command": f'/bin/bash -c \'{stop_hook}\''}]}
+            {"matcher": "", "hooks": [{"type": "command", "command": stop_hook_cmd}]}
         ],
     }
 }
