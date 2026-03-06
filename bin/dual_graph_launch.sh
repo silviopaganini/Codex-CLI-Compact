@@ -427,10 +427,11 @@ PRIMEEOF
   mkdir -p "$PROJECT/.claude"
   PRIME_CMD="$DATA_DIR/prime.sh"
   # Write JSON via Python to avoid quoting/escaping issues in paths with spaces.
-  "$PYTHON" - "$PROJECT/.claude/settings.local.json" "$PRIME_CMD" <<'PY'
+  "$PYTHON" - "$PROJECT/.claude/settings.local.json" "$PRIME_CMD" "$PROJECT" <<'PY'
 import json, sys
 settings_file = sys.argv[1]
 prime_cmd = sys.argv[2]
+project_path = sys.argv[3] if len(sys.argv) > 3 else ""
 hook_cmd = f'/bin/bash "{prime_cmd}"'
 stop_hook = (
     'INPUT=$(cat); '
@@ -441,7 +442,7 @@ stop_hook = (
     'if json.loads(l).get(\'type\') == \'assistant\'" 2>/dev/null | head -1 || echo 0); '
     'OUT=$((${CHARS:-0}/4)); IN=$((OUT*4)); '
     'curl -sf -X POST http://localhost:8899/log -H "Content-Type: application/json" '
-    '-d "{\"input_tokens\":$IN,\"output_tokens\":$OUT,\"model\":\"claude-sonnet-4-6\",\"description\":\"auto\"}" >/dev/null 2>&1 || true; '
+    f'-d \'{{"input_tokens":$IN,"output_tokens":$OUT,"model":"claude-sonnet-4-6","description":"auto","project":"{project_path}"}}\' >/dev/null 2>&1 || true; '
     'fi; exit 0'
 )
 payload = {

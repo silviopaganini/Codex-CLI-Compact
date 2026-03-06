@@ -252,7 +252,7 @@ set "STOP_PS1=%DATA_DIR%\stop_hook.ps1"
     echo         $last = ^($lines ^| Where-Object { $_.type -eq 'assistant' }^) ^| Select-Object -Last 1
     echo         $chars = ^([string]^($last.message.content^)^).Length
     echo         $out = [math]::Max^(1, [int]^($chars / 4^)^); $in = $out * 4
-    echo         Invoke-RestMethod -Method Post -Uri 'http://localhost:8899/log' -ContentType 'application/json' -Body ^("{`"input_tokens`":$in,`"output_tokens`":$out,`"model`":`"claude-sonnet-4-6`",`"description`":`"auto`"}"^) -EA 0 ^| Out-Null
+    echo         Invoke-RestMethod -Method Post -Uri 'http://localhost:8899/log' -ContentType 'application/json' -Body ^("{`"input_tokens`":$in,`"output_tokens`":$out,`"model`":`"claude-sonnet-4-6`",`"description`":`"auto`",`"project`":`"%PROJECT%`"}"^) -EA 0 ^| Out-Null
     echo     } catch {}
     echo }
 ) > "%STOP_PS1%"
