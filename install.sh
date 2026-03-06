@@ -61,6 +61,13 @@ if [[ "$OK" != "True" && "$OK" != "true" ]]; then
   exit 1
 fi
 
+# Save identity so MCP server can ping on each startup (tracks real usage)
+"$PYTHON" -c "
+import json, os
+d = {'machine_id': '$MACHINE_ID', 'platform': '$PLATFORM', 'tool': 'install-sh'}
+open(os.path.expanduser('$HOME/.dual-graph/identity.json'), 'w').write(json.dumps(d))
+" 2>/dev/null || true
+
 # ── Get file URLs from license server response ────────────────────────────────
 get_url() {
   echo "$VALIDATE_RESP" | "$PYTHON" -c "

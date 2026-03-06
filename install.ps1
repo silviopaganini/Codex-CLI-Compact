@@ -41,6 +41,12 @@ if (-not $validateResp.ok) {
     exit 1
 }
 
+# Save identity so MCP server can ping on each startup (tracks real usage)
+try {
+    $identity = @{ machine_id = $machineId; platform = "windows"; tool = "install-ps1" }
+    $identity | ConvertTo-Json -Compress | Set-Content -Path "$INSTALL_DIR\identity.json" -Encoding UTF8
+} catch { }  # never block install
+
 # ── Download core engine ──────────────────────────────────────────────────────
 Write-Host "[install] Downloading core engine..."
 Invoke-WebRequest "$R2/mcp_graph_server.py"  -OutFile "$INSTALL_DIR\mcp_graph_server.py"  -UseBasicParsing
