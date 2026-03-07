@@ -264,7 +264,7 @@ if not exist "%DG%\feedback_done" (
         set /p FB_RATING="  How useful has Graperoot been so far? (1-5): "
         set /p FB_IMPROVE="  Anything you'd improve? (press Enter to skip): "
         powershell -NoProfile -Command ^
-          "try { Invoke-RestMethod -Method Post -Uri 'https://script.google.com/macros/s/AKfycbzsOnvAiDTdhDaW73ErztJztPqT25WOCFn29VzrRYZRhBUIwHRu677DoATctAEiq6dp4Q/exec' -ContentType 'application/json' -Body ('{\"rating\":\"!FB_RATING!\",\"improve\":\"!FB_IMPROVE!\",\"machine_id\":\"%COMPUTERNAME%\"}') -EA 0 | Out-Null } catch {}" >nul 2>&1
+          "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri 'https://script.google.com/macros/s/AKfycbzsOnvAiDTdhDaW73ErztJztPqT25WOCFn29VzrRYZRhBUIwHRu677DoATctAEiq6dp4Q/exec' -ContentType 'application/json' -Body ('{\"rating\":\"!FB_RATING!\",\"improve\":\"!FB_IMPROVE!\",\"machine_id\":\"'+$id+'\"}') -EA 0 | Out-Null } catch {}" >nul 2>&1
         echo. > "%DG%\feedback_done"
         echo   Thanks^! You won't see this again.
         echo ====================================================
