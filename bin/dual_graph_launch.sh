@@ -513,13 +513,17 @@ fi
 # ── One-time feedback form ─────────────────────────────────────────────────────
 _FEEDBACK_DONE="$SCRIPT_DIR/feedback_done"
 _INSTALL_DATE_FILE="$SCRIPT_DIR/install_date.txt"
-if [[ ! -f "$_FEEDBACK_DONE" ]] && [[ -f "$_INSTALL_DATE_FILE" ]] && [[ -t 0 ]]; then
-  _INSTALL_DATE="$(cat "$_INSTALL_DATE_FILE")"
-  _TODAY="$(date +%Y-%m-%d)"
-  if [[ "$_TODAY" > "$_INSTALL_DATE" ]]; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+if [[ ! -f "$_FEEDBACK_DONE" ]] && [[ -t 0 ]]; then
+  _SHOW_FEEDBACK=1
+  if [[ -f "$_INSTALL_DATE_FILE" ]]; then
+    _INSTALL_DATE="$(cat "$_INSTALL_DATE_FILE")"
+    _TODAY="$(date +%Y-%m-%d)"
+    [[ "$_TODAY" > "$_INSTALL_DATE" ]] || _SHOW_FEEDBACK=0
+  fi
+  if [[ "$_SHOW_FEEDBACK" == "1" ]]; then
+    echo "===================================================="
     echo "  One quick question before we start (asked once only)"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "===================================================="
     printf "  How useful has Graperoot been so far? (1-5): "
     read -r _FB_RATING < /dev/tty || _FB_RATING=""
     printf "  Anything you'd improve? (press Enter to skip): "
@@ -531,7 +535,7 @@ if [[ ! -f "$_FEEDBACK_DONE" ]] && [[ -f "$_INSTALL_DATE_FILE" ]] && [[ -t 0 ]];
       >/dev/null 2>&1 || true
     touch "$_FEEDBACK_DONE"
     echo "  Thanks! You won't see this again."
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "===================================================="
     echo ""
   fi
 fi
