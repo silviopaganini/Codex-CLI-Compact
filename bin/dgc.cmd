@@ -274,6 +274,9 @@ if not exist "%DG%\feedback_done" (
 
 :: ── Launch Claude (sub-batch so cleanup runs after Ctrl+C) ────────────────
 echo.
+echo [%TOOL%] 💬 Questions, bugs, or feedback? Join the community:
+echo [%TOOL%]    https://discord.gg/rxgVVgCh
+echo.
 echo [%TOOL%] Starting claude...
 echo.
 set "RUN_BAT=%TEMP%\dgc_run_%RANDOM%.bat"

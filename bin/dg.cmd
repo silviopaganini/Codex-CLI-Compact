@@ -142,6 +142,10 @@ echo [%TOOL%] MCP registered -> http://localhost:%MCP_PORT%/mcp
 echo.
 
 :: ── Launch Codex CLI ───────────────────────────────────────────────────────
+echo.
+echo [%TOOL%] 💬 Questions, bugs, or feedback? Join the community:
+echo [%TOOL%]    https://discord.gg/rxgVVgCh
+echo.
 echo [%TOOL%] Starting Codex CLI...
 echo.
 cd /d "%PROJECT%"
