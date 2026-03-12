@@ -4,7 +4,7 @@
 #   dg  -> codex
 #   dgc -> claude
 
-set -euo pipefail
+set -Eeuo pipefail
 
 ASSISTANT="${1:-}"
 if [[ "$ASSISTANT" != "codex" && "$ASSISTANT" != "claude" ]]; then
@@ -20,6 +20,14 @@ PROJECT="$(cd "$PROJECT" && pwd)"
 PROMPT="${2:-}"
 DATA_DIR="$PROJECT/.dual-graph"
 TELEMETRY_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
+REPORTED_ERROR=0
+CURRENT_STEP="Initializing launcher"
+
+if [[ "$ASSISTANT" == "codex" ]]; then
+  TOOL_LABEL="dg"
+else
+  TOOL_LABEL="dgc"
+fi
 
 _platform_name() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -49,6 +57,7 @@ _send_cli_error() {
   local step="$1"
   local message="$2"
   local machine_id platform payload
+  REPORTED_ERROR=1
   machine_id="$(_machine_id)"
   platform="$(_platform_name)"
   payload="$(python3 - "$step" "$message" "$machine_id" "$platform" <<'PY' 2>/dev/null || true
@@ -69,6 +78,16 @@ PY
       >/dev/null 2>&1 || true
   fi
 }
+
+_on_launcher_err() {
+  local rc="$?"
+  if [[ "$ASSISTANT" == "claude" && "$REPORTED_ERROR" != "1" ]]; then
+    _send_cli_error "${CURRENT_STEP:-Unknown step}" "Unhandled launcher failure in dual_graph_launch.sh (exit=$rc)"
+  fi
+  return "$rc"
+}
+
+trap '_on_launcher_err' ERR
 
 _version_gt() {
   local remote="$1"
@@ -104,6 +123,7 @@ fi
 if [[ -n "${DG_MCP_PORT:-}" ]]; then
   MCP_PORT="$DG_MCP_PORT"
 else
+  CURRENT_STEP="Selecting port"
   MCP_PORT=8080
   while lsof -ti :"$MCP_PORT" >/dev/null 2>&1; do
     MCP_PORT=$((MCP_PORT + 1))
@@ -115,7 +135,6 @@ else
 fi
 
 if [[ "$ASSISTANT" == "codex" ]]; then
-  TOOL_LABEL="dg"
   DOC_FILE="$PROJECT/CODEX.md"
   DOC_NAME="CODEX.md"
   POLICY_MARKER="dg-policy-v5"
@@ -171,11 +190,13 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 
 if [[ ! -x "$VENV/bin/python3" ]]; then
+  CURRENT_STEP="Preparing Python environment"
   echo "[$TOOL_LABEL] Creating venv at $VENV ..."
   python3 -m venv "$VENV"
   echo "[$TOOL_LABEL] Installing Python dependencies..."
   "$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
 elif ! "$VENV/bin/python3" -c "import mcp, uvicorn, anyio, starlette" 2>/dev/null; then
+  CURRENT_STEP="Preparing Python environment"
   echo "[$TOOL_LABEL] Installing missing Python dependencies..."
   "$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
 fi
@@ -436,6 +457,7 @@ if [[ ! -f "$DATA_DIR/context-store.json" ]]; then
 fi
 
 echo "[$TOOL_LABEL] Scanning project..."
+CURRENT_STEP="Scanning project"
 if ! "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json"; then
   echo "[$TOOL_LABEL] Error: project scan failed."
   _send_cli_error "Scanning project" "Project scan failed in dual_graph_launch.sh"
@@ -447,6 +469,7 @@ echo ""
 echo "[$TOOL_LABEL] Port    : $MCP_PORT"
 echo ""
 
+CURRENT_STEP="Starting MCP server"
 nohup env \
   DG_DATA_DIR="$DATA_DIR" \
   DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
@@ -460,6 +483,7 @@ echo "$MCP_PORT" > "$DATA_DIR/mcp_port"
 trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"' EXIT INT TERM
 
 echo "[$TOOL_LABEL] Waiting for MCP server..."
+CURRENT_STEP="Waiting for MCP server"
 _MCP_READY=0
 for i in $(seq 1 20); do
   if nc -z localhost "$MCP_PORT" 2>/dev/null; then
@@ -580,6 +604,7 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 
 if [[ "$ASSISTANT" == "codex" ]]; then
+  CURRENT_STEP="Registering MCP"
   codex mcp remove dual-graph >/dev/null 2>&1 || true
   if codex mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
     echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
@@ -591,6 +616,7 @@ if [[ "$ASSISTANT" == "codex" ]]; then
     exit 1
   fi
 else
+  CURRENT_STEP="Registering MCP"
   claude mcp remove dual-graph >/dev/null 2>&1 || true
   if ! claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
     echo "[$TOOL_LABEL] Error: failed to register MCP with claude."
@@ -656,8 +682,16 @@ echo "[$TOOL_LABEL] Starting $ASSISTANT..."
 echo ""
 
 cd "$PROJECT"
+CURRENT_STEP="Running $ASSISTANT"
+set +e
 if [[ -n "$PROMPT" ]]; then
   "$ASSISTANT" "$PROMPT"
 else
   "$ASSISTANT"
 fi
+ASSISTANT_EXIT=$?
+set -e
+if [[ "$ASSISTANT" == "claude" && "$ASSISTANT_EXIT" -ne 0 ]]; then
+  _send_cli_error "Running Claude" "Claude exited with code $ASSISTANT_EXIT in dual_graph_launch.sh"
+fi
+exit "$ASSISTANT_EXIT"

@@ -21,6 +21,7 @@ set "R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 set "BASE_URL=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 set "NOTICE_FILE=%DG%\last_update_notice.txt"
 set "WEBHOOK_URL=https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
+set "CLAUDE_EXIT=0"
 
 :: ── Detect install method (Scoop vs direct) ───────────────────────────────
 set "REINSTALL_CMD=irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 | iex"
@@ -38,6 +39,7 @@ if "%~1"=="" (
 
 if not exist "%PROJECT%" (
     echo [%TOOL%] Error: path not found: %PROJECT%
+    powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"Project path not found in dgc.cmd\",\"script_step\":\"Resolving project path\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
     exit /b 1
 )
 
@@ -112,6 +114,7 @@ if %errorlevel%==0 (
     set /a MCP_PORT+=1
     if !MCP_PORT! gtr 8099 (
         echo [%TOOL%] Error: no free port in range 8080-8099
+        powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"No free port found in dgc.cmd\",\"script_step\":\"Selecting MCP port\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
         exit /b 1
     )
     goto :find_port
@@ -308,6 +311,10 @@ set "RUN_BAT=%TEMP%\dgc_run_%RANDOM%.bat"
     echo claude
 ) > "%RUN_BAT%"
 call "%RUN_BAT%"
+set "CLAUDE_EXIT=%ERRORLEVEL%"
+if not "%CLAUDE_EXIT%"=="0" (
+    powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"Claude exited with code %CLAUDE_EXIT% in dgc.cmd\",\"script_step\":\"Running Claude\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
+)
 del "%RUN_BAT%" >nul 2>&1
 
 :: ── Cleanup after claude exits ─────────────────────────────────────────────
@@ -326,3 +333,4 @@ if exist "%DATA_DIR%\mcp_port" (
     del "%DATA_DIR%\mcp_port" >nul 2>&1
 )
 echo [%TOOL%] Done.
+exit /b %CLAUDE_EXIT%
