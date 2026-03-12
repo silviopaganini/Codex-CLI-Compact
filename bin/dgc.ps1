@@ -308,11 +308,16 @@ try {
     if (-not $env:DG_DISABLE_TOKEN_COUNTER) {
         # Wrap entirely so token-counter failures never kill the main launcher.
         try {
+            Write-Host "[$Tool] Installing token counter..."
             Remove-ClaudeMcpSafe "token-counter"
             $npxCmd = (Get-Command npx.cmd -ErrorAction SilentlyContinue).Source
             if ($npxCmd) {
-                [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", "cmd", "/c", $npxCmd, "-y", "token-counter-mcp"))
-                Write-Host "[$Tool] Token counter registered (global)"
+                $exit = Invoke-NativeQuiet $npxCmd @("-y", "token-counter-mcp", "setup", "https://github.com/kunal12203/token-counter-mcp")
+                if ($exit -eq 0) {
+                    Write-Host "[$Tool] Token counter installed"
+                } else {
+                    Write-Host "[$Tool] Token counter setup failed"
+                }
             } else {
                 Write-Host "[$Tool] Token counter skipped (no npx.cmd found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
             }
