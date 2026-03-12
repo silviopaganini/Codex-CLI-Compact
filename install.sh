@@ -117,17 +117,17 @@ BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 
 # ── Download core engine ──────────────────────────────────────────────────────
 echo "[install] Downloading core engine..."
-curl -sSL "$URL_MCP"    -o "$INSTALL_DIR/mcp_graph_server.py"
-curl -sSL "$URL_GRAPH"  -o "$INSTALL_DIR/graph_builder.py"
-curl -sSL "$URL_LAUNCH" -o "$INSTALL_DIR/dual_graph_launch.sh" && chmod +x "$INSTALL_DIR/dual_graph_launch.sh"
-curl -sSL "$URL_DG"     -o "$INSTALL_DIR/dg.py"
+curl -fsSL "$URL_MCP"    -o "$INSTALL_DIR/mcp_graph_server.py"
+curl -fsSL "$URL_GRAPH"  -o "$INSTALL_DIR/graph_builder.py"
+curl -fsSL "$URL_LAUNCH" -o "$INSTALL_DIR/dual_graph_launch.sh" && chmod +x "$INSTALL_DIR/dual_graph_launch.sh"
+curl -fsSL "$URL_DG"     -o "$INSTALL_DIR/dg.py"
 curl -sf  "$BASE_URL/bin/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null \
   || curl -sf "$R2/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null \
   || true
 
 echo "[install] Downloading CLI tools..."
-curl -sSL "$BASE_URL/bin/dgc" -o "$INSTALL_DIR/dgc" && chmod +x "$INSTALL_DIR/dgc"
-curl -sSL "$BASE_URL/bin/dg"  -o "$INSTALL_DIR/dg"  && chmod +x "$INSTALL_DIR/dg"
+curl -fsSL "$BASE_URL/bin/dgc" -o "$INSTALL_DIR/dgc" && chmod +x "$INSTALL_DIR/dgc"
+curl -fsSL "$BASE_URL/bin/dg"  -o "$INSTALL_DIR/dg"  && chmod +x "$INSTALL_DIR/dg"
 
 echo "[install] Creating Python venv at $VENV ..."
 "$PYTHON" -m venv "$VENV"

@@ -1,0 +1,20 @@
+Identify where restaurant onboarding starts in the codebase and name the exact frontend page and backend endpoint files. Answer in 3 bullet points max.
+Find the customer authentication flow and list the main frontend auth store or hook plus the backend auth route file. Keep it under 4 bullets.
+Locate where WhatsApp webhook handling is implemented and summarize the flow in 2 sentences with exact file names.
+Find where restaurant location setup or updates happen and name the main page/component plus the backend route. Use 3 bullets max.
+Identify the code path for order creation in the restaurant portal and point to the main UI component and backend API file. Keep it concise.
+Find where dashboard analytics or stats are loaded for restaurants and name the relevant page, hook, and backend endpoint file if present.
+Locate the wallet or payout related implementation for restaurants and summarize the main files involved in 3 bullets max.
+Find where customer favorites are handled and list the backend route file and any likely customer portal files involved.
+Identify where admin ticket or support ticket handling exists and name the backend files or models involved. Keep it short.
+Find the payment or refund handling path for customers and list the main backend route files and any service file used.
+Locate where menu management is implemented for restaurants and point to the main page, form component, and backend API file.
+Identify how websocket updates are handled for orders or restaurant notifications and name the hook or websocket files involved.
+Find where file uploads or image uploads are handled and list the frontend component plus backend upload endpoint file.
+Locate the restaurant settings flow and name the settings page plus the backend files that likely support it.
+Find where notification state or dropdown behavior is implemented in the restaurant portal and name the relevant store/component files.
+Identify the customer address management implementation and list the backend route file plus any frontend files that likely call it.
+Find where internal scheduled tasks or background task endpoints exist and summarize the main files in 3 bullets max.
+Locate the revenue chart or analytics visualization implementation and name the chart component plus any hook or API layer it depends on.
+Find where restaurant registration or login is handled in the restaurant portal and name the main pages plus backend auth file.
+Identify the central API client layers across the frontend apps and list the key API helper files for restaurant portal and backend integration.

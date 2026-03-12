@@ -238,14 +238,14 @@ if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
     echo "$_REMOTE_VER" > "$_NOTICE_FILE" 2>/dev/null || true
   fi
   echo "[$TOOL_LABEL] Update available ($_LOCAL_VER → $_REMOTE_VER) — updating..."
-  curl -sSL "$_BASE_URL/bin/mcp_graph_server.py" -o "$SCRIPT_DIR/mcp_graph_server.py" \
-    || curl -sSL "$_R2/mcp_graph_server.py" -o "$SCRIPT_DIR/mcp_graph_server.py"
-  curl -sSL "$_BASE_URL/bin/graph_builder.py" -o "$SCRIPT_DIR/graph_builder.py" \
-    || curl -sSL "$_R2/graph_builder.py" -o "$SCRIPT_DIR/graph_builder.py"
-  curl -sSL "$_BASE_URL/bin/dg.py" -o "$SCRIPT_DIR/dg.py" \
-    || curl -sSL "$_R2/dg.py" -o "$SCRIPT_DIR/dg.py"
-  curl -sSL "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
-    || curl -sSL "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
+  curl -fsSL "$_BASE_URL/bin/mcp_graph_server.py" -o "$SCRIPT_DIR/mcp_graph_server.py" \
+    || curl -fsSL "$_R2/mcp_graph_server.py" -o "$SCRIPT_DIR/mcp_graph_server.py"
+  curl -fsSL "$_BASE_URL/bin/graph_builder.py" -o "$SCRIPT_DIR/graph_builder.py" \
+    || curl -fsSL "$_R2/graph_builder.py" -o "$SCRIPT_DIR/graph_builder.py"
+  curl -fsSL "$_BASE_URL/bin/dg.py" -o "$SCRIPT_DIR/dg.py" \
+    || curl -fsSL "$_R2/dg.py" -o "$SCRIPT_DIR/dg.py"
+  curl -fsSL "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
+    || curl -fsSL "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
   chmod +x "$SCRIPT_DIR/dual_graph_launch.sh"
   echo "$_REMOTE_VER" > "$SCRIPT_DIR/version.txt"
   echo "[$TOOL_LABEL] Updated to $_REMOTE_VER. Restarting..."
