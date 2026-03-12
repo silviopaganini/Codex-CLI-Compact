@@ -24,6 +24,7 @@ set "BASE_URL=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/mai
 set "NOTICE_FILE=%DG%\last_update_notice.txt"
 set "WEBHOOK_URL=https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
 set "CLAUDE_EXIT=0"
+set "FORCE_POLICY_WRITE=0"
 
 :: ── Detect install method (Scoop vs direct) ───────────────────────────────
 set "REINSTALL_CMD=irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 | iex"
@@ -75,6 +76,7 @@ if defined REMOTE_VER (
       if exist "%TEMP%\dg_should_update.txt" set /p SHOULD_UPDATE=<"%TEMP%\dg_should_update.txt"
     )
     if "%SHOULD_UPDATE%"=="1" (
+      set "FORCE_POLICY_WRITE=1"
       set "LAST_NOTICE_VER="
       if exist "%NOTICE_FILE%" set /p LAST_NOTICE_VER=<"%NOTICE_FILE%"
       if not "%LAST_NOTICE_VER%"=="%REMOTE_VER%" (
@@ -87,8 +89,8 @@ if defined REMOTE_VER (
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing } catch { Invoke-WebRequest '%R2%/mcp_graph_server.py' -OutFile '%DG%\mcp_graph_server.py' -UseBasicParsing }" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing } catch { Invoke-WebRequest '%R2%/graph_builder.py' -OutFile '%DG%\graph_builder.py' -UseBasicParsing }" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dual_graph_launch.sh' -OutFile '%DG%\dual_graph_launch.sh' -UseBasicParsing } catch { Invoke-WebRequest '%R2%/dual_graph_launch.sh' -OutFile '%DG%\dual_graph_launch.sh' -UseBasicParsing }" >nul 2>&1
-      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.cmd' -OutFile '%DG%\dgc.cmd.new' -UseBasicParsing } catch {}" >nul 2>&1
-      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dg.cmd' -OutFile '%DG%\dg.cmd.new' -UseBasicParsing } catch {}" >nul 2>&1
+      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.cmd' -OutFile '%DG%\dgc.cmd.new' -UseBasicParsing } catch { try { Invoke-WebRequest '%R2%/dgc.cmd' -OutFile '%DG%\dgc.cmd.new' -UseBasicParsing } catch {} }" >nul 2>&1
+      powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dg.cmd' -OutFile '%DG%\dg.cmd.new' -UseBasicParsing } catch { try { Invoke-WebRequest '%R2%/dg.cmd' -OutFile '%DG%\dg.cmd.new' -UseBasicParsing } catch {} }" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dgc.ps1' -OutFile '%DG%\dgc.ps1' -UseBasicParsing } catch {}" >nul 2>&1
       powershell -NoProfile -Command "try { Invoke-WebRequest '%BASE_URL%/bin/dg.ps1' -OutFile '%DG%\dg.ps1' -UseBasicParsing } catch {}" >nul 2>&1
       echo %REMOTE_VER%> "%DG%\version.txt"
@@ -163,6 +165,7 @@ if exist "%PROJECT%\.gitignore" (
 :: ── Write CLAUDE.md policy (create or upgrade) ────────────────────────────
 set "NEED_WRITE=0"
 if not exist "%DOC_FILE%" set "NEED_WRITE=1"
+if "%FORCE_POLICY_WRITE%"=="1" set "NEED_WRITE=1"
 if exist "%DOC_FILE%" (
     findstr /C:"%POLICY_MARKER%" "%DOC_FILE%" >nul 2>&1
     if errorlevel 1 set "NEED_WRITE=1"
@@ -170,7 +173,7 @@ if exist "%DOC_FILE%" (
 
 if "%NEED_WRITE%"=="1" (
     echo [%TOOL%] Writing CLAUDE.md policy...
-    powershell -NoProfile -Command "try { (Invoke-WebRequest '%R2%/CLAUDE.md.template' -UseBasicParsing).Content | Set-Content -LiteralPath '%DOC_FILE%' -Encoding UTF8; exit 0 } catch { exit 1 }" >nul 2>&1
+    powershell -NoProfile -Command "try { (Invoke-WebRequest '%BASE_URL%/CLAUDE.md.template' -UseBasicParsing).Content | Set-Content -LiteralPath '%DOC_FILE%' -Encoding UTF8; exit 0 } catch { try { (Invoke-WebRequest '%R2%/CLAUDE.md.template' -UseBasicParsing).Content | Set-Content -LiteralPath '%DOC_FILE%' -Encoding UTF8; exit 0 } catch { exit 1 } }" >nul 2>&1
     if errorlevel 1 (
         echo [%TOOL%] Warning: could not fetch CLAUDE.md template. Check your connection.
     ) else (
