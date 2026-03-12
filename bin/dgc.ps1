@@ -300,8 +300,10 @@ try {
         [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "token-counter", "--scope", "user"))
         [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "token-counter"))
     }
-    # Windows requires cmd /c wrapper for npx execution inside Claude MCP
-    [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", "cmd", "/c", "npx", "-y", "token-counter-mcp"))
+    # Windows: use cmd /c and a fully-qualified npx path so MCP inherits PATH correctly.
+    $npxPath = (Get-Command npx -ErrorAction SilentlyContinue).Source
+    if (-not $npxPath) { $npxPath = "npx" }
+    [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", "cmd", "/c", $npxPath, "-y", "token-counter-mcp"))
     Write-Host "[$Tool] Token counter registered (global)"
 
     $primePs1 = Join-Path $DataDir "prime.ps1"
