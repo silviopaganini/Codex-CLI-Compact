@@ -72,8 +72,8 @@ function Download-File([string]$Primary, [string]$Fallback, [string]$OutFile) {
     return $false
 }
 
-function Get-FreePort([int]$Start = 8080) {
-    for ($port = $Start; $port -le 8099; $port++) {
+function Get-FreePort {
+    for ($port = 8080; $port -le 8099; $port++) {
         try {
             $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
             $listener.Start()
@@ -268,31 +268,22 @@ try {
     }
 
     $port = Get-FreePort
+    Write-Host "[$Tool] Starting MCP server on port $port..."
     $log = Join-Path $DataDir "mcp_server.log"
     $errLog = Join-Path $DataDir "mcp_server.err.log"
-    $maxAttempts = 5
-    for ($attempt = 0; $attempt -lt $maxAttempts; $attempt++) {
-        Write-Host "[$Tool] Starting MCP server on port $port..."
-        $env:DG_DATA_DIR = $DataDir
-        $env:DUAL_GRAPH_PROJECT_ROOT = $resolvedProject
-        $env:DG_BASE_URL = "http://localhost:$port"
-        $env:PORT = "$port"
-        $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
-        if (-not (Wait-Port -Port $port)) {
-            try { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue } catch {}
-            if ($attempt -eq ($maxAttempts - 1)) {
-                Send-CliError "Starting MCP server" "MCP server did not start in dgc.ps1"
-                throw "MCP server did not start"
-            }
-            $port = Get-FreePort ($port + 1)
-            continue
-        }
-        Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
-        Set-Content -Path $portFile -Value "$port" -Encoding UTF8
-        Write-Host "[$Tool] MCP server ready on port $port."
-        Write-Host ""
-        break
+    $env:DG_DATA_DIR = $DataDir
+    $env:DUAL_GRAPH_PROJECT_ROOT = $resolvedProject
+    $env:DG_BASE_URL = "http://localhost:$port"
+    $env:PORT = "$port"
+    $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+    Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
+    Set-Content -Path $portFile -Value "$port" -Encoding UTF8
+    if (-not (Wait-Port -Port $port)) {
+        Send-CliError "Starting MCP server" "MCP server did not start in dgc.ps1"
+        throw "MCP server did not start"
     }
+    Write-Host "[$Tool] MCP server ready on port $port."
+    Write-Host ""
 
     # PowerShell 7 can treat non-zero native exits as terminating errors.
     # Handle Claude CLI exits explicitly so "not found" on remove stays harmless.
@@ -317,24 +308,44 @@ try {
     if (-not $env:DG_DISABLE_TOKEN_COUNTER) {
         # Wrap entirely so token-counter failures never kill the main launcher.
         try {
-            Write-Host "[$Tool] Installing token counter..."
-            Remove-ClaudeMcpSafe "token-counter"
-            $npxCmd = (Get-Command npx.cmd -ErrorAction SilentlyContinue).Source
-            if ($npxCmd) {
-                $exit = Invoke-NativeQuiet $npxCmd @("-y", "token-counter-mcp", "setup", "https://github.com/kunal12203/token-counter-mcp")
-                if ($exit -eq 0) {
-                    Write-Host "[$Tool] Token counter installed"
+                Remove-ClaudeMcpSafe "token-counter"
+
+            $nodeCmd = (Get-Command node -ErrorAction SilentlyContinue).Source
+            $npmCmd  = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
+            if ($nodeCmd -and $npmCmd) {
+                # Pre-install token-counter-mcp once so Claude never spawns a visible cmd window.
+                $tcDir = Join-Path $DG "tc"
+                $tcPkg = Join-Path $tcDir "node_modules\token-counter-mcp\package.json"
+                if (-not (Test-Path $tcPkg)) {
+                    Write-Host "[$Tool] Installing token-counter-mcp (one-time)..."
+                    New-Item -ItemType Directory -Force -Path $tcDir | Out-Null
+                    Set-Content -Path (Join-Path $tcDir "package.json") -Value '{"name":"tc-host","version":"1.0.0","private":true}' -Encoding UTF8
+                    [void](Invoke-NativeQuiet $npmCmd @("install", "--prefix", $tcDir, "--no-package-lock", "token-counter-mcp"))
+                }
+                # Resolve the JS entry point from the installed package.json.
+                $tcMain = $null
+                if (Test-Path $tcPkg) {
                     try {
-                        Start-Process $npxCmd -ArgumentList "token-counter-mcp dashboard --port 8899" -WindowStyle Hidden
+                        $pkgData = Get-Content $tcPkg -Raw | ConvertFrom-Json
+                        $pkgDir  = Split-Path $tcPkg
+                        $bin = $pkgData.bin
+                        if ($bin -is [string] -and $bin) {
+                            $tcMain = Join-Path $pkgDir $bin
+                        } elseif ($bin -and $bin.'token-counter-mcp') {
+                            $tcMain = Join-Path $pkgDir $bin.'token-counter-mcp'
+                        } elseif ($pkgData.main) {
+                            $tcMain = Join-Path $pkgDir $pkgData.main
+                        }
                     } catch {}
-                    $portFile = Join-Path $env:USERPROFILE ".claude\token-counter\dashboard-port.txt"
-                    $dashPort = "8899"
-                    Write-Host "[$Tool] Token counter dashboard -> http://localhost:$dashPort"
+                }
+                if ($tcMain -and (Test-Path $tcMain)) {
+                    [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", $nodeCmd, $tcMain))
+                    Write-Host "[$Tool] Token counter registered (global)"
                 } else {
-                    Write-Host "[$Tool] Token counter setup failed"
+                    Write-Host "[$Tool] Token counter skipped (install failed). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
                 }
             } else {
-                Write-Host "[$Tool] Token counter skipped (no npx.cmd found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
+                Write-Host "[$Tool] Token counter skipped (no node/npm found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
             }
         } catch {
             Write-Host "[$Tool] Token counter setup skipped: $($_.Exception.Message)"
