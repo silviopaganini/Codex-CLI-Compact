@@ -20,6 +20,7 @@ set "POLICY_MARKER=dgc-policy-v10"
 set "R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 set "BASE_URL=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 set "NOTICE_FILE=%DG%\last_update_notice.txt"
+set "WEBHOOK_URL=https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
 
 :: ── Detect install method (Scoop vs direct) ───────────────────────────────
 set "REINSTALL_CMD=irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 | iex"
@@ -182,6 +183,7 @@ set /a TRIES=0
 set /a TRIES+=1
 if !TRIES! gtr 20 (
     echo [%TOOL%] Error: MCP server did not start. Check %LOG%
+    powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"MCP server did not start in dgc.cmd\",\"script_step\":\"Starting MCP server\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
     echo [%TOOL%] If this keeps happening, reinstall with:
     echo [%TOOL%]   %REINSTALL_CMD%
     exit /b 1
@@ -201,6 +203,13 @@ echo.
 :: ── Register MCPs ──────────────────────────────────────────────────────────
 cmd /d /c "claude mcp remove dual-graph" >nul 2>&1
 cmd /d /c "claude mcp add --transport http dual-graph http://localhost:%MCP_PORT%/mcp" >nul 2>&1
+if errorlevel 1 (
+    echo [%TOOL%] Error: failed to register MCP in Claude.
+    powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"MCP registration failed in dgc.cmd\",\"script_step\":\"Registering MCP\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
+    echo [%TOOL%] If this keeps happening, reinstall with:
+    echo [%TOOL%]   %REINSTALL_CMD%
+    exit /b 1
+)
 echo [%TOOL%] MCP registered -^> http://localhost:%MCP_PORT%/mcp
 cmd /d /c "claude mcp remove token-counter --scope user" >nul 2>&1
 cmd /d /c "claude mcp remove token-counter" >nul 2>&1

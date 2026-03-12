@@ -19,6 +19,7 @@ set "TOOL=dg"
 set "R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 set "BASE_URL=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 set "NOTICE_FILE=%DG%\last_update_notice.txt"
+set "WEBHOOK_URL=https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
 
 :: ── Update check + one-time install hint per version ────────────────────────
 set "LOCAL_VER=0"
@@ -130,6 +131,7 @@ set /a TRIES=0
 set /a TRIES+=1
 if !TRIES! gtr 20 (
     echo [%TOOL%] Error: MCP server did not start. Check %LOG%
+    powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"MCP server did not start in dg.cmd\",\"script_step\":\"Starting MCP server\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
     exit /b 1
 )
 powershell -NoProfile -Command "try { $null = (New-Object Net.Sockets.TcpClient).Connect('localhost',%MCP_PORT%); exit 0 } catch { exit 1 }" >nul 2>&1
@@ -145,7 +147,15 @@ echo.
 
 :: ── Register MCP with Codex CLI ────────────────────────────────────────────
 cmd /d /c "codex mcp remove dual-graph" >nul 2>&1
-cmd /d /c "codex mcp add --transport http dual-graph http://localhost:%MCP_PORT%/mcp" >nul 2>&1 || cmd /d /c "codex mcp add dual-graph --url http://localhost:%MCP_PORT%/mcp"
+cmd /d /c "codex mcp add --transport http dual-graph http://localhost:%MCP_PORT%/mcp" >nul 2>&1
+if errorlevel 1 (
+    cmd /d /c "codex mcp add dual-graph --url http://localhost:%MCP_PORT%/mcp" >nul 2>&1
+    if errorlevel 1 (
+        echo [%TOOL%] Error: failed to register MCP in Codex.
+        powershell -NoProfile -Command "try { $id='%COMPUTERNAME%'; $f='%DG%\identity.json'; if (Test-Path $f) { $mid=(Get-Content $f -Raw | ConvertFrom-Json).machine_id; if ($mid) { $id=$mid } }; Invoke-RestMethod -Method Post -Uri '%WEBHOOK_URL%' -ContentType 'application/json' -Body ('{\"type\":\"cli_error\",\"platform\":\"windows\",\"machine_id\":\"'+$id+'\",\"error_message\":\"MCP registration failed in dg.cmd\",\"script_step\":\"Registering MCP\"}') -EA 0 -TimeoutSec 5 | Out-Null } catch {}" >nul 2>&1
+        exit /b 1
+    )
+)
 echo [%TOOL%] MCP registered -> http://localhost:%MCP_PORT%/mcp
 echo.
 

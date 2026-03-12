@@ -19,6 +19,56 @@ PROJECT="${1:-$(pwd)}"
 PROJECT="$(cd "$PROJECT" && pwd)"
 PROMPT="${2:-}"
 DATA_DIR="$PROJECT/.dual-graph"
+TELEMETRY_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
+
+_platform_name() {
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "macos"
+  else
+    echo "linux"
+  fi
+}
+
+_machine_id() {
+  if [[ -f "$SCRIPT_DIR/identity.json" ]]; then
+    python3 - "$SCRIPT_DIR/identity.json" <<'PY' 2>/dev/null || echo "unknown"
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+    print(d.get("machine_id", "unknown"))
+except Exception:
+    print("unknown")
+PY
+  else
+    echo "unknown"
+  fi
+}
+
+_send_cli_error() {
+  local step="$1"
+  local message="$2"
+  local machine_id platform payload
+  machine_id="$(_machine_id)"
+  platform="$(_platform_name)"
+  payload="$(python3 - "$step" "$message" "$machine_id" "$platform" <<'PY' 2>/dev/null || true
+import json, sys
+print(json.dumps({
+    "type": "cli_error",
+    "platform": sys.argv[4],
+    "machine_id": sys.argv[3],
+    "error_message": sys.argv[2],
+    "script_step": sys.argv[1],
+}))
+PY
+)"
+  if [[ -n "$payload" ]]; then
+    curl -sf -X POST "$TELEMETRY_WEBHOOK" \
+      -H "Content-Type: application/json" \
+      -d "$payload" \
+      >/dev/null 2>&1 || true
+  fi
+}
 
 # ── Kill any stale MCP server for this project (frees its port before scanning) ─
 if [[ -f "$DATA_DIR/mcp_server.pid" ]]; then
@@ -358,7 +408,11 @@ if [[ ! -f "$DATA_DIR/context-store.json" ]]; then
 fi
 
 echo "[$TOOL_LABEL] Scanning project..."
-"$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json"
+if ! "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json"; then
+  echo "[$TOOL_LABEL] Error: project scan failed."
+  _send_cli_error "Scanning project" "Project scan failed in dual_graph_launch.sh"
+  exit 1
+fi
 echo "[$TOOL_LABEL] Scan complete."
 echo ""
 
@@ -378,12 +432,20 @@ echo "$MCP_PORT" > "$DATA_DIR/mcp_port"
 trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"' EXIT INT TERM
 
 echo "[$TOOL_LABEL] Waiting for MCP server..."
+_MCP_READY=0
 for i in $(seq 1 20); do
   if nc -z localhost "$MCP_PORT" 2>/dev/null; then
+    _MCP_READY=1
     break
   fi
   sleep 1
 done
+
+if [[ "$_MCP_READY" != "1" ]]; then
+  echo "[$TOOL_LABEL] Error: MCP server did not start. Check $DATA_DIR/mcp_server.log"
+  _send_cli_error "Starting MCP server" "MCP server did not start in dual_graph_launch.sh"
+  exit 1
+fi
 
 echo "[$TOOL_LABEL] MCP server ready on port $MCP_PORT (PID $MCP_PID)."
 echo ""
@@ -493,13 +555,20 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   codex mcp remove dual-graph >/dev/null 2>&1 || true
   if codex mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
     echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
-  else
-    codex mcp add dual-graph --url "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1 || true
+  elif codex mcp add dual-graph --url "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
     echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
+  else
+    echo "[$TOOL_LABEL] Error: failed to register MCP with codex."
+    _send_cli_error "Registering MCP" "MCP registration failed in dual_graph_launch.sh (codex)"
+    exit 1
   fi
 else
   claude mcp remove dual-graph >/dev/null 2>&1 || true
-  claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1
+  if ! claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+    echo "[$TOOL_LABEL] Error: failed to register MCP with claude."
+    _send_cli_error "Registering MCP" "MCP registration failed in dual_graph_launch.sh (claude)"
+    exit 1
+  fi
   echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
 
   # ── Token Counter MCP (global user scope — works in all projects) ────────
