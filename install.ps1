@@ -73,10 +73,27 @@ try {
         )
         $venvDir = Join-Path $InstallDir "venv"
         $venvPython = Join-Path $venvDir "Scripts\python.exe"
+        $venvLooksHealthy = $false
 
         if (Test-Path $venvPython) {
-            Write-Host "[install] Reusing existing Python venv..."
-            return
+            & $venvPython -m pip --version > $null 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[install] Reusing existing Python venv..."
+                return
+            }
+
+            Write-Host "[install] Existing venv is missing pip. Trying to repair it..."
+            & $venvPython -m ensurepip --upgrade > $null 2>&1
+            & $venvPython -m pip --version > $null 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[install] Repaired existing Python venv."
+                return
+            }
+
+            Write-Host "[install] Existing venv is incomplete. Rebuilding it..."
+            if (-not (Remove-PathWithRetry $venvDir)) {
+                throw "Could not remove broken virtual environment at $venvDir. Close terminals or Python processes using ~/.dual-graph and retry."
+            }
         }
 
         Write-Host "[install] Creating Python venv..."
