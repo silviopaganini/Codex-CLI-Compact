@@ -298,9 +298,12 @@ try {
 
     if (-not (Has-ClaudeMcp "token-counter")) {
         # Windows: use cmd /c and a fully-qualified npx path so MCP inherits PATH correctly.
-        $npxPath = (Get-Command npx -ErrorAction SilentlyContinue).Source
-        if (-not $npxPath) { $npxPath = "npx" }
-        [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", "cmd", "/c", $npxPath, "-y", "token-counter-mcp"))
+    $npxCmd = (Get-Command npx.cmd -ErrorAction SilentlyContinue).Source
+    if (-not $npxCmd) {
+        $npxCmd = (Get-Command npx -ErrorAction SilentlyContinue).Source
+    }
+    if (-not $npxCmd) { $npxCmd = "npx.cmd" }
+    [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", "cmd", "/c", $npxCmd, "-y", "token-counter-mcp"))
         Write-Host "[$Tool] Token counter registered (global)"
     } else {
         Write-Host "[$Tool] Token counter already registered (global)"
