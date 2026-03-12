@@ -6,6 +6,7 @@ setlocal
 
 set "DG=%USERPROFILE%\.dual-graph"
 set "LOCAL_PS1=%DG%\dgc.ps1"
+set "BOOTSTRAP_PS1=%TEMP%\dual_graph_dgc_bootstrap.ps1"
 set "REMOTE_PS1=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/bin/dgc.ps1"
 set "LOCAL_VER=%DG%\version.txt"
 set "REMOTE_VER=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/bin/version.txt"
@@ -14,7 +15,14 @@ set "REMOTE_VER_FALLBACK=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev/ver
 if not exist "%DG%" mkdir "%DG%" >nul 2>&1
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { Invoke-WebRequest '%REMOTE_PS1%' -OutFile '%LOCAL_PS1%' -UseBasicParsing -TimeoutSec 10 | Out-Null } catch {}; try { Invoke-WebRequest '%REMOTE_VER%' -OutFile '%LOCAL_VER%' -UseBasicParsing -TimeoutSec 5 | Out-Null } catch { try { Invoke-WebRequest '%REMOTE_VER_FALLBACK%' -OutFile '%LOCAL_VER%' -UseBasicParsing -TimeoutSec 5 | Out-Null } catch {} }" >nul 2>&1
+  "try { Invoke-WebRequest '%REMOTE_PS1%' -OutFile '%LOCAL_PS1%' -UseBasicParsing -TimeoutSec 10 | Out-Null } catch {}; try { Invoke-WebRequest '%REMOTE_PS1%' -OutFile '%BOOTSTRAP_PS1%' -UseBasicParsing -TimeoutSec 10 | Out-Null } catch {}; try { Invoke-WebRequest '%REMOTE_VER%' -OutFile '%LOCAL_VER%' -UseBasicParsing -TimeoutSec 5 | Out-Null } catch { try { Invoke-WebRequest '%REMOTE_VER_FALLBACK%' -OutFile '%LOCAL_VER%' -UseBasicParsing -TimeoutSec 5 | Out-Null } catch {} }" >nul 2>&1
+
+if exist "%BOOTSTRAP_PS1%" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOTSTRAP_PS1%" %*
+  set "EXIT_CODE=%ERRORLEVEL%"
+  del "%BOOTSTRAP_PS1%" >nul 2>&1
+  exit /b %EXIT_CODE%
+)
 
 if exist "%LOCAL_PS1%" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_PS1%" %*
