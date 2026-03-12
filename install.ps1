@@ -48,6 +48,52 @@ try {
         }
     }
 
+    function Remove-PathWithRetry {
+        param(
+            [Parameter(Mandatory = $true)][string]$Path,
+            [int]$MaxRetries = 4
+        )
+        if (-not (Test-Path $Path)) { return $true }
+        for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+            try {
+                Remove-Item $Path -Recurse -Force -ErrorAction Stop
+                return $true
+            } catch {
+                if ($attempt -ge $MaxRetries) { return $false }
+                Start-Sleep -Seconds ([Math]::Min(2 * $attempt, 6))
+            }
+        }
+        return $false
+    }
+
+    function Ensure-Venv {
+        param(
+            [Parameter(Mandatory = $true)][string]$PythonExe,
+            [Parameter(Mandatory = $true)][string]$InstallDir
+        )
+        $venvDir = Join-Path $InstallDir "venv"
+        $venvPython = Join-Path $venvDir "Scripts\python.exe"
+
+        if (Test-Path $venvPython) {
+            Write-Host "[install] Reusing existing Python venv..."
+            return
+        }
+
+        Write-Host "[install] Creating Python venv..."
+        & $PythonExe -m venv $venvDir --copies
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $venvPython)) { return }
+
+        Write-Host "[install] Fresh venv creation failed. Cleaning up partial environment and retrying..."
+        if (-not (Remove-PathWithRetry $venvDir)) {
+            throw "Could not remove locked virtual environment at $venvDir. Close terminals or Python processes using ~/.dual-graph and retry."
+        }
+
+        & $PythonExe -m venv $venvDir --copies
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $venvPython)) {
+            throw "Failed to create Python virtual environment"
+        }
+    }
+
     $step = "Initializing install directory"
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
 
@@ -135,9 +181,7 @@ try {
 
     # ── Create venv ───────────────────────────────────────────────────────────────
     $step = "Creating Python venv"
-    Write-Host "[install] Creating Python venv..."
-    & $pythonExe -m venv "$INSTALL_DIR\venv" --clear --copies
-    if ($LASTEXITCODE -ne 0) { throw "Failed to create Python virtual environment" }
+    Ensure-Venv -PythonExe $pythonExe -InstallDir $INSTALL_DIR
 
     $step = "Installing Python dependencies"
     Write-Host "[install] Installing Python dependencies..."
