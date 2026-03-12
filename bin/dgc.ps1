@@ -147,6 +147,17 @@ function Has-ClaudeMcp([string]$Name) {
     }
 }
 
+function Remove-ClaudeMcpSafe([string]$Name) {
+    $oldPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & claude mcp remove $Name > $null 2>&1
+    } catch {
+    } finally {
+        $ErrorActionPreference = $oldPref
+    }
+}
+
 try {
     if (-not (Test-Path $DG)) { New-Item -ItemType Directory -Force -Path $DG | Out-Null }
     if (-not (Test-Path $Python)) { throw "Python environment not found. Please reinstall dual-graph once." }
@@ -276,9 +287,7 @@ try {
 
     # PowerShell 7 can treat non-zero native exits as terminating errors.
     # Handle Claude CLI exits explicitly so "not found" on remove stays harmless.
-    try {
-            [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "dual-graph"))
-        } catch {}
+    Remove-ClaudeMcpSafe "dual-graph"
     $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "http", "dual-graph", "http://localhost:$port/mcp")
     if ($mcpAddExit -ne 0) {
         $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "dual-graph", "--url", "http://localhost:$port/mcp")
@@ -299,9 +308,8 @@ try {
     if (-not $env:DG_DISABLE_TOKEN_COUNTER) {
         # Wrap entirely so token-counter failures never kill the main launcher.
         try {
-                try { [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "token-counter", "--scope", "user")) } catch {}
-                try { [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "token-counter")) } catch {}
-            
+                Remove-ClaudeMcpSafe "token-counter"
+
             $nodeCmd = (Get-Command node -ErrorAction SilentlyContinue).Source
             $npmCmd  = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
             if ($nodeCmd -and $npmCmd) {
@@ -422,9 +430,7 @@ if ($transcript -and (Test-Path $transcript)) {
 
     Write-Host ""
     Write-Host "[$Tool] Cleaning up..."
-    if (Has-ClaudeMcp "dual-graph") {
-        [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "dual-graph"))
-    }
+    Remove-ClaudeMcpSafe "dual-graph"
     # Token counter is global; do not remove it on exit.
     if (Test-Path $pidFile) {
         try { Stop-Process -Id ([int](Get-Content $pidFile -Raw)) -Force -ErrorAction SilentlyContinue } catch {}
