@@ -296,18 +296,18 @@ try {
     }
     Write-Host "[$Tool] MCP registered -> http://localhost:$port/mcp"
 
-    if (-not (Has-ClaudeMcp "token-counter")) {
-        # Windows: use cmd /c and a fully-qualified npx path so MCP inherits PATH correctly.
+    if (Has-ClaudeMcp "token-counter") {
+        [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "token-counter", "--scope", "user"))
+        [void](Invoke-NativeQuiet "claude" @("mcp", "remove", "token-counter"))
+    }
+    # Windows: use cmd /c and a fully-qualified npx.cmd path so MCP inherits PATH correctly.
     $npxCmd = (Get-Command npx.cmd -ErrorAction SilentlyContinue).Source
     if (-not $npxCmd) {
         $npxCmd = (Get-Command npx -ErrorAction SilentlyContinue).Source
     }
     if (-not $npxCmd) { $npxCmd = "npx.cmd" }
     [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", "cmd", "/c", $npxCmd, "-y", "token-counter-mcp"))
-        Write-Host "[$Tool] Token counter registered (global)"
-    } else {
-        Write-Host "[$Tool] Token counter already registered (global)"
-    }
+    Write-Host "[$Tool] Token counter registered (global)"
 
     $primePs1 = Join-Path $DataDir "prime.ps1"
     $stopPs1 = Join-Path $DataDir "stop_hook.ps1"
@@ -335,6 +335,7 @@ if (Test-Path $storeFile) {
 "@ | Set-Content -Path $primePs1 -Encoding UTF8
 
     @"
+$stopTemplate = @'
 $input = [Console]::In.ReadToEnd()
 try { $transcript = ($input | ConvertFrom-Json).transcript_path } catch { $transcript = '' }
 if ($transcript -and (Test-Path $transcript)) {
@@ -344,10 +345,11 @@ if ($transcript -and (Test-Path $transcript)) {
         $last = ($lines | Where-Object { $_.type -eq 'assistant' }) | Select-Object -Last 1
         $chars = ([string]($last.message.content)).Length
         $out = [Math]::Max(1, [int]($chars / 4)); $in = $out * 4
-        Invoke-RestMethod -Method Post -Uri 'http://localhost:8899/log' -ContentType 'application/json' -Body ("{`"input_tokens`":$in,`"output_tokens`":$out,`"model`":`"claude-sonnet-4-6`",`"description`":`"auto`",`"project`":`"$resolvedProject`"}") -ErrorAction SilentlyContinue | Out-Null
+        Invoke-RestMethod -Method Post -Uri 'http://localhost:8899/log' -ContentType 'application/json' -Body ("{`"input_tokens`":$in,`"output_tokens`":$out,`"model`":`"claude-sonnet-4-6`",`"description`":`"auto`",`"project`":`"__PROJECT__`"}") -ErrorAction SilentlyContinue | Out-Null
     } catch {}
 }
-"@ | Set-Content -Path $stopPs1 -Encoding UTF8
+'@
+($stopTemplate.Replace("__PROJECT__", $resolvedProject)) | Set-Content -Path $stopPs1 -Encoding UTF8
 
     if (-not (Test-Path $settingsDir)) { New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null }
     $primeCmd = 'powershell -NoProfile -File "' + (To-ForwardSlashes $primePs1) + '"'
