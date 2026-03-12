@@ -38,19 +38,60 @@ _platform_name() {
 }
 
 _machine_id() {
-  if [[ -f "$SCRIPT_DIR/identity.json" ]]; then
-    python3 - "$SCRIPT_DIR/identity.json" <<'PY' 2>/dev/null || echo "unknown"
-import json, sys
+  python3 - "$SCRIPT_DIR/identity.json" <<'PY' 2>/dev/null || echo "unknown"
+import json
+import os
+import platform
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+identity_path = Path(sys.argv[1])
+
+def get_machine_id() -> str:
+    sys_name = platform.system()
+    try:
+        if sys_name == "Darwin":
+            out = subprocess.check_output(
+                ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+            ).decode()
+            for line in out.splitlines():
+                if "IOPlatformUUID" in line:
+                    return line.split('"')[3]
+        elif sys_name == "Linux":
+            for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+                try:
+                    val = Path(p).read_text().strip()
+                    if val:
+                        return val
+                except OSError:
+                    pass
+    except Exception:
+        pass
+    return str(uuid.getnode())
+
 try:
-    with open(sys.argv[1], "r", encoding="utf-8") as f:
-        d = json.load(f)
-    print(d.get("machine_id", "unknown"))
+    if identity_path.exists():
+        data = json.loads(identity_path.read_text(encoding="utf-8"))
+        mid = data.get("machine_id", "").strip()
+        if mid:
+            print(mid)
+            raise SystemExit(0)
+    mid = get_machine_id()
+    identity_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "machine_id": mid,
+        "platform": platform.system().lower(),
+        "tool": "launcher-auto",
+    }
+    identity_path.write_text(json.dumps(payload), encoding="utf-8")
+    print(mid)
 except Exception:
     print("unknown")
 PY
-  else
-    echo "unknown"
-  fi
 }
 
 _send_cli_error() {
@@ -682,7 +723,7 @@ echo "[$TOOL_LABEL] Starting $ASSISTANT..."
 echo ""
 
 cd "$PROJECT"
-CURRENT_STEP="Running $ASSISTANT"
+CURRENT_STEP="Running Claude"
 set +e
 if [[ -n "$PROMPT" ]]; then
   "$ASSISTANT" "$PROMPT"
@@ -692,6 +733,8 @@ fi
 ASSISTANT_EXIT=$?
 set -e
 if [[ "$ASSISTANT" == "claude" && "$ASSISTANT_EXIT" -ne 0 ]]; then
+  REPORTED_ERROR=1
   _send_cli_error "Running Claude" "Claude exited with code $ASSISTANT_EXIT in dual_graph_launch.sh"
 fi
+trap - ERR
 exit "$ASSISTANT_EXIT"
