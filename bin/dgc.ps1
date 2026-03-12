@@ -226,11 +226,12 @@ try {
     $port = Get-FreePort
     Write-Host "[$Tool] Starting MCP server on port $port..."
     $log = Join-Path $DataDir "mcp_server.log"
+    $errLog = Join-Path $DataDir "mcp_server.err.log"
     $env:DG_DATA_DIR = $DataDir
     $env:DUAL_GRAPH_PROJECT_ROOT = $resolvedProject
     $env:DG_BASE_URL = "http://localhost:$port"
     $env:PORT = "$port"
-    $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $log -WindowStyle Hidden -PassThru
+    $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
     Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
     Set-Content -Path $portFile -Value "$port" -Encoding UTF8
     if (-not (Wait-Port -Port $port)) {
