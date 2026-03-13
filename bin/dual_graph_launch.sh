@@ -373,9 +373,15 @@ This project uses a local dual-graph MCP server for efficient context retrieval.
    - Read only relevant \`.dual-graph-context/packs/*.md\` files for the current task.
    - If critical context is missing, ask one scoped question and continue after answer.
 
-5. **Read \`recommended_files\`** using \`graph_read\`.
+5. **Read \`recommended_files\`** using \`graph_read\` — **one call per file**.
+   - \`graph_read\` accepts a single \`file\` parameter (string). Call it separately for each
+     recommended file. Do NOT pass an array or batch multiple files into one call.
    - \`recommended_files\` may contain \`file::symbol\` entries (e.g. \`src/auth.ts::handleLogin\`).
-     Pass them verbatim to \`graph_read\` — it reads only that symbol's lines, not the full file.
+     Pass them verbatim to \`graph_read(file: "src/auth.ts::handleLogin")\` — it reads only
+     that symbol's lines, not the full file.
+   - Example: if \`recommended_files\` is \`["src/auth.ts::handleLogin", "src/db.ts"]\`,
+     call \`graph_read(file: "src/auth.ts::handleLogin")\` and \`graph_read(file: "src/db.ts")\`
+     as two separate calls (they can be parallel).
 
 6. **Check \`confidence\` and obey the caps strictly:**
    - \`confidence=high\` -> Stop. Do NOT grep or explore further.
@@ -415,9 +421,15 @@ This project uses a local dual-graph MCP server for efficient context retrieval.
    Do NOT do broad or recursive exploration. Read only specific files if their names
    are mentioned, or ask the user what to work on.
 
-4. **Read \`recommended_files\`** using \`graph_read\`.
+4. **Read \`recommended_files\`** using \`graph_read\` — **one call per file**.
+   - \`graph_read\` accepts a single \`file\` parameter (string). Call it separately for each
+     recommended file. Do NOT pass an array or batch multiple files into one call.
    - \`recommended_files\` may contain \`file::symbol\` entries (e.g. \`src/auth.ts::handleLogin\`).
-     Pass them verbatim to \`graph_read\` — it reads only that symbol's lines, not the full file.
+     Pass them verbatim to \`graph_read(file: "src/auth.ts::handleLogin")\` — it reads only
+     that symbol's lines, not the full file.
+   - Example: if \`recommended_files\` is \`["src/auth.ts::handleLogin", "src/db.ts"]\`,
+     call \`graph_read(file: "src/auth.ts::handleLogin")\` and \`graph_read(file: "src/db.ts")\`
+     as two separate calls (they can be parallel).
 
 5. **Check \`confidence\` and obey the caps strictly:**
    - \`confidence=high\` -> Stop. Do NOT grep or explore further.
