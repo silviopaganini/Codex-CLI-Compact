@@ -361,13 +361,28 @@ try {
                 $tcPkg = Join-Path $tcDir "node_modules\token-counter-mcp\package.json"
                 $tcMainCandidate = Join-Path $tcDir "node_modules\token-counter-mcp\dist\index.js"
 
-                # Reinstall if package.json missing OR if the entry file is missing (partial install).
+                # Check if install or update is needed.
+                $needsInstall = $false
                 if (-not (Test-Path $tcPkg) -or -not (Test-Path $tcMainCandidate)) {
+                    $needsInstall = $true
+                } else {
+                    # Check installed version against latest — update if outdated.
+                    try {
+                        $installedVer = (Get-Content $tcPkg -Raw | ConvertFrom-Json).version
+                        $latestInfo = & $npmCmd view token-counter-mcp version 2>$null
+                        if ($latestInfo -and $installedVer -and ($latestInfo.Trim() -ne $installedVer.Trim())) {
+                            Write-Host "[$Tool] Token counter update available: $installedVer -> $($latestInfo.Trim())"
+                            $needsInstall = $true
+                        }
+                    } catch {}  # version check is best-effort, never block
+                }
+
+                if ($needsInstall) {
                     Write-Host "[$Tool] Installing token-counter-mcp..."
                     New-Item -ItemType Directory -Force -Path $tcDir | Out-Null
                     # Write without BOM (ASCII-safe JSON) so npm parses it correctly on PS5.
                     [System.IO.File]::WriteAllText((Join-Path $tcDir "package.json"), '{"name":"tc-host","version":"1.0.0","private":true}')
-                    $installExit = Invoke-NativeQuiet $npmCmd @("install", "--prefix", $tcDir, "--no-package-lock", "--no-fund", "token-counter-mcp")
+                    $installExit = Invoke-NativeQuiet $npmCmd @("install", "--prefix", $tcDir, "--no-package-lock", "--no-fund", "token-counter-mcp@latest")
                     if ($installExit -ne 0) {
                         Write-Host "[$Tool] Token counter install failed (exit $installExit). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
                     }
