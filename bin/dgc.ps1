@@ -181,6 +181,14 @@ try {
     if (-not (Test-Path $Python)) { throw "Python environment not found. Please reinstall dual-graph once." }
 
     $resolvedProject = (Resolve-Path -LiteralPath $ProjectPath).Path
+
+    Write-Host ""
+    Write-Host "[$Tool] If you receive any errors:"
+    Write-Host "[$Tool]   1. Wait 5 minutes and run dgc again"
+    Write-Host "[$Tool]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+    Write-Host "[$Tool]   3. Join Discord for help: https://discord.gg/rxgVVgCh"
+    Write-Host ""
+
     $DataDir = Join-Path $resolvedProject ".dual-graph"
     $DocFile = Join-Path $resolvedProject "CLAUDE.md"
     $Gitignore = Join-Path $resolvedProject ".gitignore"
@@ -478,11 +486,6 @@ if ($transcript -and (Test-Path $transcript)) {
     $hooks | ConvertTo-Json -Depth 8 | Set-Content -Path $settingsFile -Encoding UTF8
     Write-Host "[$Tool] Context hooks ready (SessionStart + PreCompact + Stop)"
 
-    Write-Host ""
-    Write-Host "[$Tool] If you receive any errors:"
-    Write-Host "[$Tool]   1. Wait 5 minutes and run dgc again"
-    Write-Host "[$Tool]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
-    Write-Host "[$Tool]   3. Join Discord for help: https://discord.gg/rxgVVgCh"
     Write-Host ""
     Write-Host "[$Tool] Starting claude..."
     Write-Host ""

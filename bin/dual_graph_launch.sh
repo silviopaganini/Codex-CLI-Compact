@@ -29,6 +29,13 @@ else
   TOOL_LABEL="dgc"
 fi
 
+echo ""
+echo "[$TOOL_LABEL] If you receive any errors:"
+echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dgc again"
+echo "[$TOOL_LABEL]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+echo "[$TOOL_LABEL]   3. Join Discord for help: https://discord.gg/rxgVVgCh"
+echo ""
+
 _platform_name() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "macos"
@@ -738,11 +745,6 @@ PY
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
-echo ""
-echo "[$TOOL_LABEL] If you receive any errors:"
-echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dgc again"
-echo "[$TOOL_LABEL]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
-echo "[$TOOL_LABEL]   3. Join Discord for help: https://discord.gg/rxgVVgCh"
 echo ""
 echo "[$TOOL_LABEL] Starting $ASSISTANT..."
 echo ""
