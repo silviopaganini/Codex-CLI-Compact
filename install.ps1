@@ -278,6 +278,7 @@ try {
         platform   = "windows"
         tool       = "install-ps1"
     }
+    $licenseOk = $false
     try {
         $validateResp = Invoke-RestMethod `
           -Uri "$LICENSE_SERVER/validate" `
@@ -285,13 +286,18 @@ try {
           -ContentType "application/json" `
           -Body ($payload | ConvertTo-Json -Compress) `
           -TimeoutSec 10
+        if ($validateResp.ok) {
+            $licenseOk = $true
+            Write-Host "[install] License validated." -ForegroundColor Green
+        } else {
+            $err = "$($validateResp.error)"
+            if ([string]::IsNullOrWhiteSpace($err)) { $err = "unknown" }
+            Write-Host "[install] License check returned: $err" -ForegroundColor Yellow
+            Write-Host "[install] Continuing installation..." -ForegroundColor Yellow
+        }
     } catch {
-        throw "License check failed: server unreachable"
-    }
-    if (-not $validateResp.ok) {
-        $err = "$($validateResp.error)"
-        if ([string]::IsNullOrWhiteSpace($err)) { $err = "unknown" }
-        throw "License check failed: $err"
+        Write-Host "[install] License server unreachable — skipping check." -ForegroundColor Yellow
+        Write-Host "[install] Continuing installation..." -ForegroundColor Yellow
     }
 
     # Save identity so MCP server can ping on each startup (tracks real usage)

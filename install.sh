@@ -251,12 +251,12 @@ VALIDATE_RESP=$(curl -sf -X POST "$LICENSE_SERVER/validate" \
 
 OK=$(echo "$VALIDATE_RESP" | "$PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('ok','false'))" 2>/dev/null || echo "false")
 
-if [[ "$OK" != "True" && "$OK" != "true" ]]; then
+if [[ "$OK" == "True" || "$OK" == "true" ]]; then
+  echo "[install] License validated."
+else
   ERR=$(echo "$VALIDATE_RESP" | "$PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('error','unknown'))" 2>/dev/null || echo "unknown")
-  echo "[install] License check failed: $ERR"
-  echo "[install] Get your license at https://dual-graph.gumroad.com"
-  echo "[install] Then re-run: DG_LICENSE_KEY=XXXX-XXXX-XXXX-XXXX curl -sSL ... | bash"
-  exit 1
+  echo "[install] License check returned: $ERR"
+  echo "[install] Continuing installation..."
 fi
 
 # Save identity so MCP server can ping on each startup (tracks real usage)
