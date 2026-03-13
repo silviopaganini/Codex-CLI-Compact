@@ -147,11 +147,29 @@ function Has-ClaudeMcp([string]$Name) {
     }
 }
 
-function Remove-ClaudeMcpSafe([string]$Name) {
+function Stop-McpServer([string]$PidFile, [string]$PortFile) {
+    if (Test-Path $PidFile) {
+        try { Stop-Process -Id ([int](Get-Content $PidFile -Raw)) -Force -ErrorAction SilentlyContinue } catch {}
+        Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $PortFile) {
+        try {
+            $p = [int](Get-Content $PortFile -Raw)
+            Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+        } catch {}
+        Remove-Item $PortFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Remove-ClaudeMcpSafe([string]$Name, [string]$Scope = "") {
     $oldPref = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        & claude mcp remove $Name > $null 2>&1
+        if ($Scope) {
+            & claude mcp remove $Name --scope $Scope > $null 2>&1
+        } else {
+            & claude mcp remove $Name > $null 2>&1
+        }
     } catch {
     } finally {
         $ErrorActionPreference = $oldPref
@@ -200,7 +218,12 @@ try {
                 foreach ($item in $downloads) {
                     [void](Download-File $item.Primary $item.Fallback $item.Out)
                 }
-                Write-Host "[$Tool] Updated to $remoteVer."
+                Write-Host "[$Tool] Updated to $remoteVer. Restarting..."
+                $updatedScript = Join-Path $DG "dgc.ps1"
+                if (Test-Path $updatedScript) {
+                    & $updatedScript $ProjectPath
+                    exit $LASTEXITCODE
+                }
             }
         } catch {}
     }
@@ -279,6 +302,7 @@ try {
     Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
     Set-Content -Path $portFile -Value "$port" -Encoding UTF8
     if (-not (Wait-Port -Port $port)) {
+        Stop-McpServer $pidFile $portFile
         Send-CliError "Starting MCP server" "MCP server did not start in dgc.ps1"
         throw "MCP server did not start"
     }
@@ -290,9 +314,13 @@ try {
     Remove-ClaudeMcpSafe "dual-graph"
     $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "http", "dual-graph", "http://localhost:$port/mcp")
     if ($mcpAddExit -ne 0) {
+        $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "sse", "dual-graph", "http://localhost:$port/mcp")
+    }
+    if ($mcpAddExit -ne 0) {
         $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "dual-graph", "--url", "http://localhost:$port/mcp")
     }
     if ($mcpAddExit -ne 0) {
+        Stop-McpServer $pidFile $portFile
         Send-CliError "Registering MCP" "MCP registration failed in dgc.ps1"
         Write-Host "[$Tool] Error: failed to register MCP in Claude."
         Write-Host "[$Tool] Try this:"
@@ -308,21 +336,33 @@ try {
     if (-not $env:DG_DISABLE_TOKEN_COUNTER) {
         # Wrap entirely so token-counter failures never kill the main launcher.
         try {
-                Remove-ClaudeMcpSafe "token-counter"
+            # Remove from both project and user scope — the MCP is registered user-scope.
+            Remove-ClaudeMcpSafe "token-counter"
+            Remove-ClaudeMcpSafe "token-counter" -Scope "user"
 
             $nodeCmd = (Get-Command node -ErrorAction SilentlyContinue).Source
-            $npmCmd  = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
+            # Try npm.cmd (standard install), then npm (nvm-windows shim), then npx.
+            $npmCmd = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
+            if (-not $npmCmd) { $npmCmd = (Get-Command npm -ErrorAction SilentlyContinue).Source }
+
             if ($nodeCmd -and $npmCmd) {
-                # Pre-install token-counter-mcp once so Claude never spawns a visible cmd window.
                 $tcDir = Join-Path $DG "tc"
                 $tcPkg = Join-Path $tcDir "node_modules\token-counter-mcp\package.json"
-                if (-not (Test-Path $tcPkg)) {
-                    Write-Host "[$Tool] Installing token-counter-mcp (one-time)..."
+                $tcMainCandidate = Join-Path $tcDir "node_modules\token-counter-mcp\dist\index.js"
+
+                # Reinstall if package.json missing OR if the entry file is missing (partial install).
+                if (-not (Test-Path $tcPkg) -or -not (Test-Path $tcMainCandidate)) {
+                    Write-Host "[$Tool] Installing token-counter-mcp..."
                     New-Item -ItemType Directory -Force -Path $tcDir | Out-Null
-                    Set-Content -Path (Join-Path $tcDir "package.json") -Value '{"name":"tc-host","version":"1.0.0","private":true}' -Encoding UTF8
-                    [void](Invoke-NativeQuiet $npmCmd @("install", "--prefix", $tcDir, "--no-package-lock", "token-counter-mcp"))
+                    # Write without BOM (ASCII-safe JSON) so npm parses it correctly on PS5.
+                    [System.IO.File]::WriteAllText((Join-Path $tcDir "package.json"), '{"name":"tc-host","version":"1.0.0","private":true}')
+                    $installExit = Invoke-NativeQuiet $npmCmd @("install", "--prefix", $tcDir, "--no-package-lock", "--no-fund", "token-counter-mcp")
+                    if ($installExit -ne 0) {
+                        Write-Host "[$Tool] Token counter install failed (exit $installExit). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
+                    }
                 }
-                # Resolve the JS entry point from the installed package.json.
+
+                # Resolve actual entry point from installed package.json.
                 $tcMain = $null
                 if (Test-Path $tcPkg) {
                     try {
@@ -342,10 +382,10 @@ try {
                     [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", $nodeCmd, $tcMain))
                     Write-Host "[$Tool] Token counter registered (global)"
                 } else {
-                    Write-Host "[$Tool] Token counter skipped (install failed). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
+                    Write-Host "[$Tool] Token counter skipped (entry file not found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
                 }
             } else {
-                Write-Host "[$Tool] Token counter skipped (no node/npm found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
+                Write-Host "[$Tool] Token counter skipped (node/npm not found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
             }
         } catch {
             Write-Host "[$Tool] Token counter setup skipped: $($_.Exception.Message)"
@@ -380,8 +420,8 @@ if (Test-Path `$storeFile) {
 "@ | Set-Content -Path $primePs1 -Encoding UTF8
 
 $stopTemplate = @'
-$input = [Console]::In.ReadToEnd()
-try { $transcript = ($input | ConvertFrom-Json).transcript_path } catch { $transcript = '' }
+$hookInput = [Console]::In.ReadToEnd()
+try { $transcript = ($hookInput | ConvertFrom-Json).transcript_path } catch { $transcript = '' }
 if ($transcript -and (Test-Path $transcript)) {
     try {
         $lines = Get-Content $transcript -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
@@ -418,13 +458,17 @@ if ($transcript -and (Test-Path $transcript)) {
     Write-Host ""
 
     Push-Location $resolvedProject
+    $hasNativePref = Test-Path variable:PSNativeCommandUseErrorActionPreference
+    if ($hasNativePref) { $prevNativePref = $PSNativeCommandUseErrorActionPreference; $global:PSNativeCommandUseErrorActionPreference = $false }
     try {
         & claude
         $claudeExit = $LASTEXITCODE
     } finally {
         Pop-Location
+        if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $prevNativePref }
     }
-    if ($claudeExit -ne 0) {
+    # Ignore normal user-initiated termination: SIGINT/Ctrl+C (130) and Windows CTRL_C_EVENT (-1073741510 / 0xC000013A)
+    if ($claudeExit -ne 0 -and $claudeExit -ne 130 -and $claudeExit -ne -1073741510) {
         Send-CliError "Running Claude" "Claude exited with code $claudeExit in dgc.ps1"
     }
 

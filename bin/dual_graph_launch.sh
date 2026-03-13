@@ -665,7 +665,15 @@ if [[ "$ASSISTANT" == "codex" ]]; then
 else
   CURRENT_STEP="Registering MCP"
   claude mcp remove dual-graph >/dev/null 2>&1 || true
-  if ! claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+  _MCP_REG_OK=0
+  if claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+    _MCP_REG_OK=1
+  elif claude mcp add --transport sse dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+    _MCP_REG_OK=1
+  elif claude mcp add dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+    _MCP_REG_OK=1
+  fi
+  if [[ "$_MCP_REG_OK" != "1" ]]; then
     echo "[$TOOL_LABEL] Error: failed to register MCP with claude."
     echo "[$TOOL_LABEL] Try this:"
     echo "[$TOOL_LABEL] 1. Update Claude Code CLI:"
@@ -744,7 +752,8 @@ else
 fi
 ASSISTANT_EXIT=$?
 set -e
-if [[ "$ASSISTANT" == "claude" && "$ASSISTANT_EXIT" -ne 0 ]]; then
+# Ignore exit codes that represent normal user-initiated termination (SIGINT=130, SIGTERM=143)
+if [[ "$ASSISTANT" == "claude" && "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" -ne 143 ]]; then
   REPORTED_ERROR=1
   _send_cli_error "Running Claude" "Claude exited with code $ASSISTANT_EXIT in dual_graph_launch.sh"
 fi
