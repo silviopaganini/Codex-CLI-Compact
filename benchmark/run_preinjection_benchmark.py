@@ -288,7 +288,7 @@ def run_claude(
 def run_preinjection(
     prompt: str,
     project_dir: Path,
-    token_budget: int = 3000,
+    token_budget: int = 5000,
 ) -> dict:
     """Pack context via context_packer, then run claude -p with NO MCP.
 
@@ -857,7 +857,7 @@ def main() -> int:
         "--budget",
         type=int,
         default=3000,
-        help="Token budget for pre-injection context packing (default: 3000)",
+        help="Token budget for pre-injection context packing (default: 5000)",
     )
     args = parser.parse_args()
 
