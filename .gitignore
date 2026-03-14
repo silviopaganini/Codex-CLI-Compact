@@ -37,3 +37,5 @@ license/
 # Local project graphs (per-project, stays on machine)
 .dual-graph/
 .dual-graph-context/
+benchmark/dgc-claude/
+benchmark/normal-claude/
