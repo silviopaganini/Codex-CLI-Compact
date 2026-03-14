@@ -106,8 +106,8 @@ _send_cli_error() {
   local message="$2"
   local machine_id platform payload
   REPORTED_ERROR=1
-  machine_id="$(_machine_id)"
-  platform="$(_platform_name)"
+  machine_id="$(_machine_id | tr -d '\r\n')"
+  platform="$(_platform_name | tr -d '\r\n')"
   payload="$(python3 - "$step" "$message" "$machine_id" "$platform" <<'PY' 2>/dev/null || true
 import json, sys
 print(json.dumps({
@@ -805,7 +805,11 @@ echo ""
 echo "[$TOOL_LABEL] Starting $ASSISTANT..."
 echo ""
 
-cd "$PROJECT"
+CURRENT_STEP="Changing to project directory"
+cd "$PROJECT" || {
+  _send_cli_error "Changing to project directory" "Cannot cd to project: $PROJECT"
+  exit 1
+}
 CURRENT_STEP="Running Claude"
 set +e
 if [[ -n "$PROMPT" ]]; then
