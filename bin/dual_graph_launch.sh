@@ -237,16 +237,168 @@ elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ── Python discovery & venv setup ────────────────────────────────────────────
+# Fallback chain:
+#   1. Find a working python3 (PATH → Homebrew → common locations)
+#   2. Create venv (python3 -m venv → virtualenv fallback → pip-based virtualenv)
+#   3. Install deps (pip install → retry with --no-cache-dir)
+# Goal: zero manual intervention for the user.
+
+_find_python3() {
+  # 1. PATH python3 (but verify it actually works — macOS Xcode stub may not)
+  if command -v python3 &>/dev/null; then
+    if python3 -c "import sys; assert sys.version_info >= (3, 10)" 2>/dev/null; then
+      command -v python3
+      return 0
+    fi
+  fi
+
+  # 2. Homebrew (macOS)
+  local brew_paths=(
+    "/opt/homebrew/bin/python3"
+    "/usr/local/bin/python3"
+    "/opt/homebrew/bin/python3.12"
+    "/opt/homebrew/bin/python3.11"
+    "/opt/homebrew/bin/python3.10"
+    "/usr/local/bin/python3.12"
+    "/usr/local/bin/python3.11"
+    "/usr/local/bin/python3.10"
+  )
+  for p in "${brew_paths[@]}"; do
+    if [[ -x "$p" ]] && "$p" -c "import sys; assert sys.version_info >= (3, 10)" 2>/dev/null; then
+      echo "$p"
+      return 0
+    fi
+  done
+
+  # 3. Linux common paths
+  for v in python3.12 python3.11 python3.10; do
+    if command -v "$v" &>/dev/null && "$v" -c "import sys; assert sys.version_info >= (3, 10)" 2>/dev/null; then
+      command -v "$v"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+_create_venv() {
+  local py="$1" venv_dir="$2"
+
+  # Attempt 1: standard venv module
+  if "$py" -m venv "$venv_dir" 2>/tmp/dgc_venv_err.txt; then
+    return 0
+  fi
+  echo "[$TOOL_LABEL] venv module failed, trying fallbacks..."
+  rm -rf "$venv_dir" 2>/dev/null
+
+  # Attempt 2: venv without pip (ensurepip often the broken part), then bootstrap pip
+  if "$py" -m venv --without-pip "$venv_dir" 2>/dev/null; then
+    echo "[$TOOL_LABEL] Created venv without pip, bootstrapping pip..."
+    if curl -sf --max-time 30 https://bootstrap.pypa.io/get-pip.py | "$venv_dir/bin/python3" 2>/dev/null; then
+      return 0
+    fi
+    rm -rf "$venv_dir" 2>/dev/null
+  fi
+
+  # Attempt 3: virtualenv (may already be installed)
+  if "$py" -m virtualenv "$venv_dir" 2>/dev/null; then
+    return 0
+  fi
+  rm -rf "$venv_dir" 2>/dev/null
+
+  # Attempt 4: install virtualenv via pip then use it
+  if "$py" -m pip install --user virtualenv 2>/dev/null && "$py" -m virtualenv "$venv_dir" 2>/dev/null; then
+    return 0
+  fi
+  rm -rf "$venv_dir" 2>/dev/null
+
+  # Attempt 5: uv (fast Python installer — works even without system pip)
+  if command -v uv &>/dev/null; then
+    echo "[$TOOL_LABEL] Trying uv..."
+    if uv venv "$venv_dir" --python 3.12 2>/dev/null || uv venv "$venv_dir" 2>/dev/null; then
+      return 0
+    fi
+    rm -rf "$venv_dir" 2>/dev/null
+  fi
+
+  return 1
+}
+
+_install_deps() {
+  local venv_dir="$1"
+  local pip_cmd="$venv_dir/bin/pip"
+
+  # Use uv pip if available (10x faster, no build issues)
+  if command -v uv &>/dev/null; then
+    if uv pip install --python "$venv_dir/bin/python3" "mcp>=1.3.0" uvicorn anyio starlette 2>/dev/null; then
+      return 0
+    fi
+  fi
+
+  # Standard pip
+  if "$pip_cmd" install "mcp>=1.3.0" uvicorn anyio starlette --quiet 2>/tmp/dgc_pip_err.txt; then
+    return 0
+  fi
+
+  # Retry without cache (fixes corrupted cache issues)
+  echo "[$TOOL_LABEL] Retrying pip install with --no-cache-dir..."
+  if "$pip_cmd" install "mcp>=1.3.0" uvicorn anyio starlette --quiet --no-cache-dir 2>/tmp/dgc_pip_err.txt; then
+    return 0
+  fi
+
+  return 1
+}
+
 if [[ ! -x "$VENV/bin/python3" ]]; then
   CURRENT_STEP="Preparing Python environment"
-  echo "[$TOOL_LABEL] Creating venv at $VENV ..."
-  python3 -m venv "$VENV"
+
+  # Find a working python3
+  _FOUND_PY="$(_find_python3 2>/dev/null)" || _FOUND_PY=""
+  if [[ -z "$_FOUND_PY" ]]; then
+    echo "[$TOOL_LABEL] ERROR: No working Python 3.10+ found."
+    echo "[$TOOL_LABEL] Install Python 3.10+:"
+    echo "[$TOOL_LABEL]   macOS:   brew install python@3.12"
+    echo "[$TOOL_LABEL]   Ubuntu:  sudo apt install python3 python3-venv"
+    echo "[$TOOL_LABEL]   Windows: https://python.org/downloads"
+    _report_error "Preparing Python environment" "No Python 3.10+ found in PATH or common locations"
+    exit 1
+  fi
+
+  _PY_VER="$("$_FOUND_PY" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "?")"
+  echo "[$TOOL_LABEL] Found Python $_PY_VER at $_FOUND_PY"
+
+  # Create venv with fallback chain
+  if ! _create_venv "$_FOUND_PY" "$VENV"; then
+    _VENV_ERR="$(cat /tmp/dgc_venv_err.txt 2>/dev/null | head -3)"
+    echo "[$TOOL_LABEL] ERROR: All venv creation methods failed."
+    echo "[$TOOL_LABEL] Last error: $_VENV_ERR"
+    echo "[$TOOL_LABEL] Manual fix: $_FOUND_PY -m pip install virtualenv && $_FOUND_PY -m virtualenv $VENV"
+    _report_error "Preparing Python environment" "All venv methods failed (py=$_FOUND_PY): $_VENV_ERR"
+    exit 1
+  fi
+  echo "[$TOOL_LABEL] Venv created."
+
+  # Install dependencies
   echo "[$TOOL_LABEL] Installing Python dependencies..."
-  "$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
+  if ! _install_deps "$VENV"; then
+    _PIP_ERR="$(cat /tmp/dgc_pip_err.txt 2>/dev/null | tail -5)"
+    echo "[$TOOL_LABEL] ERROR: Failed to install dependencies."
+    echo "[$TOOL_LABEL] $_PIP_ERR"
+    _report_error "Preparing Python environment" "pip install failed: $_PIP_ERR"
+    exit 1
+  fi
+
 elif ! "$VENV/bin/python3" -c "import mcp, uvicorn, anyio, starlette" 2>/dev/null; then
   CURRENT_STEP="Preparing Python environment"
   echo "[$TOOL_LABEL] Installing missing Python dependencies..."
-  "$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
+  if ! _install_deps "$VENV"; then
+    _PIP_ERR="$(cat /tmp/dgc_pip_err.txt 2>/dev/null | tail -5)"
+    echo "[$TOOL_LABEL] ERROR: Failed to install dependencies."
+    echo "[$TOOL_LABEL] $_PIP_ERR"
+    _report_error "Preparing Python environment" "pip install (retry) failed: $_PIP_ERR"
+    exit 1
+  fi
 fi
 
 PYTHON="$VENV/bin/python3"
