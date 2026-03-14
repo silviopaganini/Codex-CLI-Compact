@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 
 set "DG=%USERPROFILE%\.dual-graph"
 set "SELF_CMD=%DG%\dg.cmd"
-set "LAUNCHER_BUILD=20260312b"
+set "LAUNCHER_BUILD=20260315a"
 
 :: ── Apply pending self-update (downloaded by previous run) ────────────────
 if exist "%DG%\dg.cmd.new" (

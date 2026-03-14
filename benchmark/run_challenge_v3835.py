@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DGC v3.8.33 Challenge Benchmark — 10 complex prompts, Normal vs Pre-Injection.
+"""DGC v3.8.35 Challenge Benchmark — 10 complex prompts, Normal vs Pre-Injection.
 
 Normal Claude gets ALL native tools (Read, Grep, Glob, Bash, Edit, Write, Agent).
 Pre-Injection gets packed context (5K budget) + same native tools.
@@ -36,12 +36,12 @@ _LOCAL_BIN = _BENCH_DIR.parent / "bin"
 _RESULTS_DIR = _BENCH_DIR / "results"
 _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-PROMPTS_FILE = _BENCH_DIR / "prompts_challenge_v3.8.33.json"
-RAW_FILE = _RESULTS_DIR / "raw_challenge_v3.8.33.jsonl"
-REPORT_FILE = _RESULTS_DIR / "benchmark_challenge_v3.8.33.md"
-CHECKPOINT_FILE = _RESULTS_DIR / "checkpoint_challenge_v3.8.33.json"
+PROMPTS_FILE = _BENCH_DIR / "prompts_challenge_v3.8.35.json"
+RAW_FILE = _RESULTS_DIR / "raw_challenge_v3.8.35.jsonl"
+REPORT_FILE = _RESULTS_DIR / "benchmark_challenge_v3.8.35.md"
+CHECKPOINT_FILE = _RESULTS_DIR / "checkpoint_challenge_v3.8.35.json"
 
-VERSION = "3.8.33"
+VERSION = "3.8.35"
 TAG = "challenge"
 TIMEOUT_S = 600  # 10 min — complex queries with tool use need more time
 COOLDOWN_S = 5

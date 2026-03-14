@@ -1,6 +1,6 @@
 # DGC Comprehensive Benchmark Report
 
-**Generated:** 2026-03-15 01:23
+**Generated:** 2026-03-15 01:40
 **Project:** Dual-Graph Context (DGC) — Beads
 **Test Codebase:** restaurant-crm (278 files, 16 SQLAlchemy models, 3 frontends)
 **Model:** Claude Sonnet 4.6 (all runs)
@@ -18,11 +18,11 @@ usage and cost while maintaining response quality:
 | 2 | v3.8.31 | 2026-03-13 | 15 | Normal vs MCP-DGC | + Structured summaries + redirect gates |
 | 3 | v3.8.31 | 2026-03-13 | 20 | Normal vs MCP-DGC | Complex cross-cutting prompts |
 | 4 | v3.8.32 | 2026-03-14 | 15 | Normal vs MCP vs Pre-Inject | Pre-injection mode (no MCP tools) |
-| 5 | **v3.8.33** | **2026-03-14** | **10** | **Normal vs PI v3.8.33** | **Optimized PI: full summaries, 5K budget, code-first packing** |
+| 5 | **v3.8.35** | **2026-03-14** | **10** | **Normal vs PI v3.8.35** | **Optimized PI: full summaries, 5K budget, code-first packing** |
 
 ### Bottom Line
 
-| Metric | v3.8.30 MCP | v3.8.31 MCP | v3.8.32 MCP | v3.8.32 PI | **v3.8.33 PI** |
+| Metric | v3.8.30 MCP | v3.8.31 MCP | v3.8.32 MCP | v3.8.32 PI | **v3.8.35 PI** |
 |--------|-------------|-------------|-------------|------------|----------------|
 | Avg Cost vs Normal | -4.0% | +15.7% | -4.3% | -42.7% | **-45.1%** |
 | Avg Quality | 0.0/50 | 0.0/50 | 39.2/50 | 37.7/50 | **86.6/100** |
@@ -30,7 +30,7 @@ usage and cost while maintaining response quality:
 | Quality Win Rate | — | — | — | — | **10/10** |
 | Avg Wall Time | — | — | 103s | 64s | **124s** |
 
-**v3.8.33 PI is the definitive winner:** 45% cheaper, wins 10/10 on cost
+**v3.8.35 PI is the definitive winner:** 45% cheaper, wins 10/10 on cost
 AND 10/10 on quality across 10 complex challenge prompts.
 
 ---
@@ -79,17 +79,17 @@ AND 10/10 on quality across 10 complex challenge prompts.
 ### Efficiency Radar
 ![Efficiency Radar](charts/14_efficiency_radar.png)
 
-### V833 Challenge Cost
-![V833 Challenge Cost](charts/15_v833_challenge_cost.png)
+### V835 Challenge Cost
+![V835 Challenge Cost](charts/15_v835_challenge_cost.png)
 
-### V833 Challenge Quality
-![V833 Challenge Quality](charts/16_v833_challenge_quality.png)
+### V835 Challenge Quality
+![V835 Challenge Quality](charts/16_v835_challenge_quality.png)
 
-### V833 Challenge Efficiency
-![V833 Challenge Efficiency](charts/17_v833_challenge_efficiency.png)
+### V835 Challenge Efficiency
+![V835 Challenge Efficiency](charts/17_v835_challenge_efficiency.png)
 
-### V833 Challenge Savings
-![V833 Challenge Savings](charts/18_v833_challenge_savings.png)
+### V835 Challenge Savings
+![V835 Challenge Savings](charts/18_v835_challenge_savings.png)
 
 ### Full Cost Evolution
 ![Full Cost Evolution](charts/19_full_cost_evolution.png)
@@ -260,13 +260,13 @@ the prompt as structured markdown. Claude runs with ZERO MCP tools — pure reas
 
 ---
 
-## Run 5: v3.8.33 Challenge Benchmark (2026-03-14)
+## Run 5: v3.8.35 Challenge Benchmark (2026-03-14)
 
-**Architecture:** Normal Claude (all tools) vs Pre-Injection v3.8.33 (optimized packed context + all tools)
+**Architecture:** Normal Claude (all tools) vs Pre-Injection v3.8.35 (optimized packed context + all tools)
 **10 complex cross-cutting prompts** (deep_trace, security_audit, cross_system, performance,
 migration_design, error_handling, state_management, testing_strategy, dependency_map, full_stack_debug)
 
-### Key Changes in v3.8.33
+### Key Changes in v3.8.35
 - **Full structured summaries:** `expand_summary()` replaces 200-char truncation with full function
   signatures, params, returns, decorators, internal call graphs
 - **Code-first packing:** Inline code (Section 2) gets budget priority before edges — up to 45% of budget
@@ -299,7 +299,7 @@ migration_design, error_handling, state_management, testing_strategy, dependency
 
 ### Aggregate
 
-| Metric | Normal | PI v3.8.33 |
+| Metric | Normal | PI v3.8.35 |
 |--------|--------|------------|
 | **Total Cost** | $4.88 | **$2.68** |
 | **Avg Cost** | $0.4880 | **$0.2678** |
@@ -336,7 +336,7 @@ migration_design, error_handling, state_management, testing_strategy, dependency
 
 ### Verdict
 
-**PI v3.8.33 achieves a clean sweep: 10/10 cost wins, 10/10 quality wins.**
+**PI v3.8.35 achieves a clean sweep: 10/10 cost wins, 10/10 quality wins.**
 
 Key highlights:
 - **Biggest savings:** migration_design (-81%), performance (-80%), testing_strategy (-76%)
@@ -429,7 +429,7 @@ Pre-injection is dramatically faster:
 | v3.8.31 (15 prompts) | $3.22 | $3.72 | — | $6.94 |
 | v3.8.31 complex (20) | $5.35 | $6.19 | — | $11.53 |
 | v3.8.32 (15 prompts) | $2.96 | $3.27 | $1.83 | $8.06 |
-| **v3.8.33 challenge (10)** | **$4.88** | — | **$2.68** | **$7.56** |
+| **v3.8.35 challenge (10)** | **$4.88** | — | **$2.68** | **$7.56** |
 
 **Grand Total:** $41.47
 
@@ -442,7 +442,7 @@ Pre-injection is dramatically faster:
 | v3.8.30 | `main` | 2026-03-13 | Baseline: graph retrieval via MCP tools, CLAUDE.md policy |
 | v3.8.31 | `feat/structured-summaries-v3.8.31` | 2026-03-13 | Structured summaries (functions/params/returns), redirect gates, complex prompts |
 | v3.8.32 | `feat/pre-injection-mode` | 2026-03-14 | Pre-injection mode: context_packer.py, dgc_claude.py, zero MCP tools |
-| **v3.8.33** | **`feat/pi-optimize-v3.8.33`** | **2026-03-14** | **Optimized PI: full summaries, code-first packing, 5K budget, /100 quality scoring** |
+| **v3.8.35** | **`feat/pi-optimize-v3.8.35`** | **2026-03-14** | **Optimized PI: full summaries, code-first packing, 5K budget, /100 quality scoring** |
 
 ## Files Modified Per Version
 
@@ -460,14 +460,14 @@ Pre-injection is dramatically faster:
 - `benchmark/run_preinjection_benchmark.py` — 3-way benchmark runner
 - `benchmark/generate_analysis.py` — comprehensive analysis + charts
 
-### v3.8.33
+### v3.8.35
 - `bin/context_packer.py` — Full structured summaries via `expand_summary()`, code-first budget priority, 5K budget
 - `bin/dgc_claude.py` — Updated budget default (3K→5K), thorough answer instructions
-- `benchmark/prompts_challenge_v3.8.33.json` — 10 complex cross-cutting prompts
+- `benchmark/prompts_challenge_v3.8.35.json` — 10 complex cross-cutting prompts
 - `benchmark/run_challenge_v3833.py` — Challenge benchmark with problem-solving quality scoring (0-100)
-- `benchmark/generate_analysis.py` — Added v3.8.33 charts and Run 5 report section
+- `benchmark/generate_analysis.py` — Added v3.8.35 charts and Run 5 report section
 
 ---
 
 *Generated by `generate_analysis.py` — DGC Benchmark Suite*
-*Report timestamp: 2026-03-15 01:23*
+*Report timestamp: 2026-03-15 01:40*

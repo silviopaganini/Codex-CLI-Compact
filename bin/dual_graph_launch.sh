@@ -173,7 +173,17 @@ if [[ -n "${DG_MCP_PORT:-}" ]]; then
 else
   CURRENT_STEP="Selecting port"
   MCP_PORT=8080
-  while lsof -ti :"$MCP_PORT" >/dev/null 2>&1; do
+  _port_in_use() {
+    # lsof (macOS, most Linux) → ss (Linux without lsof) → python socket fallback
+    if command -v lsof &>/dev/null; then
+      lsof -ti :"$1" >/dev/null 2>&1
+    elif command -v ss &>/dev/null; then
+      ss -tlnH "sport = :$1" 2>/dev/null | grep -q .
+    else
+      python3 -c "import socket,sys; s=socket.socket(); s.settimeout(0.3); sys.exit(0 if s.connect_ex(('127.0.0.1',int(sys.argv[1])))==0 else 1)" "$1" 2>/dev/null
+    fi
+  }
+  while _port_in_use "$MCP_PORT"; do
     MCP_PORT=$((MCP_PORT + 1))
     if [[ $MCP_PORT -gt 8099 ]]; then
       echo "[$TOOL_LABEL] Error: no free port found in range 8080-8099" >&2
@@ -234,6 +244,38 @@ if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
   exec "${EXEC_ARGS[@]}"
 elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
   echo "[$TOOL_LABEL] Local version ($_LOCAL_VER) is newer than remote ($_REMOTE_VER); skipping downgrade."
+fi
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Linux dependency checks ──────────────────────────────────────────────────
+# On Linux, auto-install missing packages that commonly cause failures.
+if [[ "$OSTYPE" != "darwin"* ]]; then
+  # curl is required for self-update, hooks, telemetry
+  if ! command -v curl &>/dev/null; then
+    echo "[$TOOL_LABEL] Installing curl (required)..."
+    if command -v apt-get &>/dev/null; then
+      sudo apt-get update -qq && sudo apt-get install -y -qq curl 2>/dev/null || true
+    elif command -v yum &>/dev/null; then
+      sudo yum install -y curl 2>/dev/null || true
+    elif command -v dnf &>/dev/null; then
+      sudo dnf install -y curl 2>/dev/null || true
+    elif command -v pacman &>/dev/null; then
+      sudo pacman -S --noconfirm curl 2>/dev/null || true
+    fi
+    if ! command -v curl &>/dev/null; then
+      echo "[$TOOL_LABEL] WARNING: curl not found and auto-install failed. Some features may not work."
+    fi
+  fi
+
+  # python3-venv is needed on Debian/Ubuntu — without it, python3 -m venv fails
+  if command -v python3 &>/dev/null && ! python3 -m venv --help &>/dev/null 2>&1; then
+    echo "[$TOOL_LABEL] Installing python3-venv (required for setup)..."
+    if command -v apt-get &>/dev/null; then
+      _PY_VER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "")"
+      sudo apt-get update -qq 2>/dev/null || true
+      sudo apt-get install -y -qq "python${_PY_VER}-venv" python3-venv 2>/dev/null || true
+    fi
+  fi
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -361,7 +403,7 @@ if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "[$TOOL_LABEL]   macOS:   brew install python@3.12"
     echo "[$TOOL_LABEL]   Ubuntu:  sudo apt install python3 python3-venv"
     echo "[$TOOL_LABEL]   Windows: https://python.org/downloads"
-    _report_error "Preparing Python environment" "No Python 3.10+ found in PATH or common locations"
+    _send_cli_error "Preparing Python environment" "No Python 3.10+ found in PATH or common locations"
     exit 1
   fi
 
@@ -374,7 +416,7 @@ if [[ ! -x "$VENV/bin/python3" ]]; then
     echo "[$TOOL_LABEL] ERROR: All venv creation methods failed."
     echo "[$TOOL_LABEL] Last error: $_VENV_ERR"
     echo "[$TOOL_LABEL] Manual fix: $_FOUND_PY -m pip install virtualenv && $_FOUND_PY -m virtualenv $VENV"
-    _report_error "Preparing Python environment" "All venv methods failed (py=$_FOUND_PY): $_VENV_ERR"
+    _send_cli_error "Preparing Python environment" "All venv methods failed (py=$_FOUND_PY): $_VENV_ERR"
     exit 1
   fi
   echo "[$TOOL_LABEL] Venv created."
@@ -385,7 +427,7 @@ if [[ ! -x "$VENV/bin/python3" ]]; then
     _PIP_ERR="$(cat /tmp/dgc_pip_err.txt 2>/dev/null | tail -5)"
     echo "[$TOOL_LABEL] ERROR: Failed to install dependencies."
     echo "[$TOOL_LABEL] $_PIP_ERR"
-    _report_error "Preparing Python environment" "pip install failed: $_PIP_ERR"
+    _send_cli_error "Preparing Python environment" "pip install failed: $_PIP_ERR"
     exit 1
   fi
 
@@ -396,7 +438,7 @@ elif ! "$VENV/bin/python3" -c "import mcp, uvicorn, anyio, starlette" 2>/dev/nul
     _PIP_ERR="$(cat /tmp/dgc_pip_err.txt 2>/dev/null | tail -5)"
     echo "[$TOOL_LABEL] ERROR: Failed to install dependencies."
     echo "[$TOOL_LABEL] $_PIP_ERR"
-    _report_error "Preparing Python environment" "pip install (retry) failed: $_PIP_ERR"
+    _send_cli_error "Preparing Python environment" "pip install (retry) failed: $_PIP_ERR"
     exit 1
   fi
 fi
@@ -953,6 +995,62 @@ PY
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ── Pre-flight checks ────────────────────────────────────────────────────────
+CURRENT_STEP="Pre-flight checks"
+
+# 1. Verify the CLI tool is installed and in PATH
+if ! command -v "$ASSISTANT" &>/dev/null; then
+  echo "[$TOOL_LABEL] ERROR: '$ASSISTANT' CLI not found in PATH."
+  if [[ "$ASSISTANT" == "claude" ]]; then
+    echo "[$TOOL_LABEL] Install Claude Code:"
+    echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code"
+  else
+    echo "[$TOOL_LABEL] Install Codex CLI:"
+    echo "[$TOOL_LABEL]   npm install -g @openai/codex"
+  fi
+  # Check if npm/node exist
+  if ! command -v node &>/dev/null; then
+    echo "[$TOOL_LABEL]"
+    echo "[$TOOL_LABEL] Node.js is also missing. Install Node.js 18+ first:"
+    echo "[$TOOL_LABEL]   https://nodejs.org/en/download"
+    echo "[$TOOL_LABEL]   Or: curl -fsSL https://fnm.vercel.app/install | bash && fnm install 22"
+    _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found AND Node.js missing"
+  else
+    _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found (node=$(node -v 2>/dev/null || echo unknown))"
+  fi
+  exit 1
+fi
+
+# 2. Verify Node.js version >= 18 (Claude Code requirement)
+if command -v node &>/dev/null; then
+  _NODE_VER="$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1)"
+  if [[ -n "$_NODE_VER" && "$_NODE_VER" -lt 18 ]] 2>/dev/null; then
+    echo "[$TOOL_LABEL] ERROR: Node.js v$_NODE_VER found, but Claude Code requires Node.js 18+."
+    echo "[$TOOL_LABEL] Upgrade Node.js:"
+    echo "[$TOOL_LABEL]   https://nodejs.org/en/download"
+    echo "[$TOOL_LABEL]   Or: fnm install 22 && fnm use 22"
+    _send_cli_error "Pre-flight checks" "Node.js too old: v$_NODE_VER (need 18+)"
+    exit 1
+  fi
+fi
+
+# 3. Quick smoke test — verify CLI responds (catches broken installs, missing deps)
+if ! "$ASSISTANT" --version &>/dev/null 2>&1; then
+  echo "[$TOOL_LABEL] WARNING: '$ASSISTANT --version' failed. The CLI may not work correctly."
+  echo "[$TOOL_LABEL] Try reinstalling: npm install -g @anthropic-ai/claude-code"
+fi
+
+# 4. Verify MCP server is still alive (it may have crashed between startup and now)
+if ! kill -0 "$MCP_PID" 2>/dev/null; then
+  echo "[$TOOL_LABEL] ERROR: MCP server (PID $MCP_PID) died before Claude started."
+  _MCP_LOG_TAIL="$(tail -n 20 "$DATA_DIR/mcp_server.log" 2>/dev/null | tr '\n' ' ' | cut -c1-500)"
+  echo "[$TOOL_LABEL] Last log: $_MCP_LOG_TAIL"
+  echo "[$TOOL_LABEL] Try running dgc again. If it persists, join Discord: https://discord.gg/rxgVVgCh"
+  _send_cli_error "Pre-flight checks" "MCP server died before Claude started: $_MCP_LOG_TAIL"
+  exit 1
+fi
+
+# ── Launch CLI ───────────────────────────────────────────────────────────────
 echo ""
 echo "[$TOOL_LABEL] Starting $ASSISTANT..."
 echo ""
@@ -963,18 +1061,33 @@ cd "$PROJECT" || {
   exit 1
 }
 CURRENT_STEP="Running Claude"
+# Disable ERR trap — some bash versions (esp. Linux) fire ERR despite set +e,
+# causing spurious "Unhandled launcher failure" telemetry.
+trap - ERR
 set +e
 if [[ -n "$PROMPT" ]]; then
-  "$ASSISTANT" "$PROMPT"
+  "$ASSISTANT" "$PROMPT" 2>"$DATA_DIR/assistant_stderr.log"
 else
-  "$ASSISTANT"
+  "$ASSISTANT" 2>"$DATA_DIR/assistant_stderr.log"
 fi
 ASSISTANT_EXIT=$?
 set -e
-# Ignore exit codes that represent normal user-initiated termination (SIGINT=130, SIGTERM=143)
+
+# Ignore normal termination: 0=clean, 130=SIGINT (Ctrl+C), 143=SIGTERM
 if [[ "$ASSISTANT" == "claude" && "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" -ne 143 ]]; then
-  REPORTED_ERROR=1
-  _send_cli_error "Running Claude" "Claude exited with code $ASSISTANT_EXIT in dual_graph_launch.sh"
+  _STDERR_TAIL="$(tail -n 10 "$DATA_DIR/assistant_stderr.log" 2>/dev/null | tr '\n' ' ' | cut -c1-500)"
+  echo ""
+  echo "[$TOOL_LABEL] Claude exited with code $ASSISTANT_EXIT."
+  if [[ -n "$_STDERR_TAIL" ]]; then
+    echo "[$TOOL_LABEL] Error output: $_STDERR_TAIL"
+  fi
+  echo "[$TOOL_LABEL] Troubleshooting:"
+  echo "[$TOOL_LABEL]   1. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+  echo "[$TOOL_LABEL]   2. Check your API key: claude config"
+  echo "[$TOOL_LABEL]   3. Try running 'claude' directly to see if it works"
+  echo "[$TOOL_LABEL]   4. Join Discord for help: https://discord.gg/rxgVVgCh"
+  _send_cli_error "Running Claude" "Claude exited=$ASSISTANT_EXIT stderr=$_STDERR_TAIL"
 fi
-trap - ERR
+# Clean up stderr log on success
+[[ "$ASSISTANT_EXIT" -eq 0 ]] && rm -f "$DATA_DIR/assistant_stderr.log" 2>/dev/null
 exit "$ASSISTANT_EXIT"
