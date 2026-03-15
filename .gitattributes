@@ -1,0 +1,3 @@
+# Preserve CRLF in blob so raw.githubusercontent.com serves correct line endings
+*.cmd -text
+*.bat -text
