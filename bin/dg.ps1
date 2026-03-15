@@ -368,9 +368,9 @@ try {
 
     # Register MCP with Codex CLI
     Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
-    $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "--transport", "http", "dual-graph", "http://localhost:$port/mcp")
+    $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "http://localhost:$port/mcp")
     if ($mcpAddExit -ne 0) {
-        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--url", "http://localhost:$port/mcp")
+        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "--url", "http://localhost:$port/mcp", "dual-graph")
     }
     if ($mcpAddExit -ne 0) {
         Stop-McpServer $pidFile $portFile
