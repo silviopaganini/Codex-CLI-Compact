@@ -1,4 +1,4 @@
-# dgc — Claude Code + dual-graph MCP launcher (PowerShell)
+# dgc - Claude Code + dual-graph MCP launcher (PowerShell)
 param(
     [Parameter(Position = 0)]
     [string]$ProjectPath = "."
@@ -293,7 +293,7 @@ function Create-Venv([string]$PyExe, [string]$VenvDir) {
 try {
     if (-not (Test-Path $DG)) { New-Item -ItemType Directory -Force -Path $DG | Out-Null }
 
-    # ── Bulletproof Python venv setup ──
+    # -- Bulletproof Python venv setup --
     if (-not (Test-Path $Python)) {
         Write-Host "[$Tool] Python venv not found, setting up..."
         $foundPy = Find-Python3
@@ -512,7 +512,7 @@ try {
         # Use Continue so npm deprecation warnings on stderr don't become terminating errors.
         $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
         try {
-            # Remove from both project and user scope — the MCP is registered user-scope.
+            # Remove from both project and user scope - the MCP is registered user-scope.
             Remove-ClaudeMcpSafe "token-counter"
             Remove-ClaudeMcpSafe "token-counter" -Scope "user"
 
@@ -531,7 +531,7 @@ try {
                 if (-not (Test-Path $tcPkg) -or -not (Test-Path $tcMainCandidate)) {
                     $needsInstall = $true
                 } else {
-                    # Check installed version against latest — update if outdated.
+                    # Check installed version against latest - update if outdated.
                     try {
                         $installedVer = (Get-Content $tcPkg -Raw | ConvertFrom-Json).version
                         $latestInfo = & $npmCmd view token-counter-mcp version 2>$null
@@ -589,7 +589,7 @@ try {
         Write-Host "[$Tool] Token counter disabled via DG_DISABLE_TOKEN_COUNTER=1"
     }
 
-    # ── Clean up stale /bin/bash stop hook from old token-counter-mcp installs ──
+    # -- Clean up stale /bin/bash stop hook from old token-counter-mcp installs --
     $globalSettings = Join-Path $env:USERPROFILE ".claude\settings.json"
     if (Test-Path $globalSettings) {
         try {

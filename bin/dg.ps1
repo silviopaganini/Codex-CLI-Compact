@@ -1,4 +1,4 @@
-# dg — Codex CLI + dual-graph MCP launcher (PowerShell)
+# dg - Codex CLI + dual-graph MCP launcher (PowerShell)
 param(
     [Parameter(Position = 0)]
     [string]$ProjectPath = "."
@@ -219,7 +219,7 @@ function Create-Venv([string]$PyExe, [string]$VenvDir) {
 try {
     if (-not (Test-Path $DG)) { New-Item -ItemType Directory -Force -Path $DG | Out-Null }
 
-    # ── Bulletproof Python venv setup ──
+    # -- Bulletproof Python venv setup --
     if (-not (Test-Path $Python)) {
         Write-Host "[$Tool] Python venv not found, setting up..."
         $foundPy = Find-Python3
@@ -374,7 +374,7 @@ try {
     if (-not $npxCmd) { $npxCmd = (Get-Command npx -ErrorAction SilentlyContinue).Source }
     if (-not $npxCmd) {
         Stop-McpServer $pidFile $portFile
-        Send-CliError "Registering MCP" "npx not found — needed for mcp-remote bridge"
+        Send-CliError "Registering MCP" "npx not found - needed for mcp-remote bridge"
         Write-Host "[$Tool] Error: npx not found. Install Node.js from https://nodejs.org"
         exit 1
     }
