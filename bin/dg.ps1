@@ -360,16 +360,44 @@ try {
     Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
     Set-Content -Path $portFile -Value "$port" -Encoding UTF8
     if (-not (Wait-Port -Port $port)) {
+        # Auto-fix: kill stale process, pick new port, restart once
+        Write-Host "[$Tool] MCP server did not start -- restarting on new port..."
         Stop-McpServer $pidFile $portFile
-        Send-CliError "Starting MCP server" "MCP server did not start in dg.ps1"
-        throw "MCP server did not start"
+        $port = $port + 1
+        $env:DG_BASE_URL = "http://localhost:$port"
+        $env:DG_MCP_PORT = "$port"
+        $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+        Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
+        Set-Content -Path $portFile -Value "$port" -Encoding UTF8
+        if (-not (Wait-Port -Port $port -Tries 15)) {
+            Stop-McpServer $pidFile $portFile
+            Send-CliError "Starting MCP server" "MCP server did not start in dg.ps1 (retried)"
+            throw "MCP server did not start after retry"
+        }
+        Write-Host "[$Tool] MCP server recovered on port $port."
     }
     Write-Host "[$Tool] MCP server ready on port $port."
     Write-Host ""
 
     # Register MCP with Codex CLI (stdio bridge via mcp-remote)
     # Codex CLI only supports stdio MCP servers, so we use mcp-remote to bridge HTTP->stdio
-    Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
+
+    # Auto-install codex CLI if missing
+    if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
+        Write-Host "[$Tool] codex CLI not found -- installing..."
+        Invoke-NativeQuiet "npm" @("install", "-g", "@openai/codex") | Out-Null
+        $env:PATH = "$env:PATH;$(npm config get prefix 2>$null)\node_modules\.bin"
+        if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
+            Stop-McpServer $pidFile $portFile
+            Send-CliError "Registering MCP" "codex CLI not found, auto-install failed"
+            Write-Host "[$Tool] ERROR: could not auto-install codex CLI."
+            Write-Host "[$Tool]   npm install -g @openai/codex"
+            exit 1
+        }
+        Write-Host "[$Tool] codex CLI installed."
+    }
+
+    # Auto-install mcp-remote if missing
     $npxCmd = (Get-Command npx.cmd -ErrorAction SilentlyContinue).Source
     if (-not $npxCmd) { $npxCmd = (Get-Command npx -ErrorAction SilentlyContinue).Source }
     if (-not $npxCmd) {
@@ -378,13 +406,35 @@ try {
         Write-Host "[$Tool] Error: npx not found. Install Node.js from https://nodejs.org"
         exit 1
     }
+    if (-not (Get-Command mcp-remote -ErrorAction SilentlyContinue)) {
+        Write-Host "[$Tool] mcp-remote not found -- installing..."
+        Invoke-NativeQuiet "npm" @("install", "-g", "mcp-remote") | Out-Null
+    }
+
+    Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
     $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp")
+    # Fallback: try global mcp-remote
+    if ($mcpAddExit -ne 0) {
+        $mcpRemoteCmd = (Get-Command mcp-remote -ErrorAction SilentlyContinue).Source
+        if ($mcpRemoteCmd) {
+            $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $mcpRemoteCmd, "http://localhost:$port/mcp")
+        }
+    }
+    # Auto-fix: reinstall deps and retry
+    if ($mcpAddExit -ne 0) {
+        Write-Host "[$Tool] MCP registration failed -- reinstalling deps and retrying..."
+        Invoke-NativeQuiet "npm" @("install", "-g", "@openai/codex", "mcp-remote") | Out-Null
+        Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
+        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp")
+    }
     if ($mcpAddExit -ne 0) {
         Stop-McpServer $pidFile $portFile
-        Send-CliError "Registering MCP" "MCP registration failed in dg.ps1"
-        Write-Host "[$Tool] Error: failed to register MCP in Codex."
-        Write-Host "[$Tool] Make sure Codex CLI is installed: npm install -g @openai/codex"
-        Write-Host "[$Tool] Join Discord for help: https://discord.gg/rxgVVgCh"
+        Send-CliError "Registering MCP" "MCP registration failed after auto-fix in dg.ps1"
+        Write-Host "[$Tool] Error: failed to register MCP with codex after auto-fix."
+        Write-Host "[$Tool] Manual fix:"
+        Write-Host "[$Tool]   npm install -g @openai/codex mcp-remote"
+        Write-Host "[$Tool]   Then run dg again."
+        Write-Host "[$Tool] If it still fails, join Discord: https://discord.gg/rxgVVgCh"
         exit 1
     }
     Write-Host "[$Tool] MCP registered -> http://localhost:$port/mcp (via mcp-remote)"

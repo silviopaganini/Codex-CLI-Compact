@@ -31,8 +31,13 @@ fi
 
 echo ""
 echo "[$TOOL_LABEL] If you receive any errors:"
-echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dgc again"
-echo "[$TOOL_LABEL]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+if [[ "$ASSISTANT" == "codex" ]]; then
+  echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dg again"
+  echo "[$TOOL_LABEL]   2. Update Codex: npm install -g @openai/codex"
+else
+  echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dgc again"
+  echo "[$TOOL_LABEL]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+fi
 echo "[$TOOL_LABEL]   3. Join Discord for help: https://discord.gg/rxgVVgCh"
 echo ""
 
