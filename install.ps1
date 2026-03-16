@@ -66,6 +66,19 @@ try {
         return $false
     }
 
+    # Run an external command, suppressing stderr so $ErrorActionPreference=Stop
+    # doesn't convert it into a terminating error (known PowerShell gotcha).
+    function Invoke-Native {
+        param([Parameter(Mandatory)][scriptblock]$Command)
+        $backupEAP = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            & $Command 2>$null
+        } finally {
+            $ErrorActionPreference = $backupEAP
+        }
+    }
+
     function Ensure-Venv {
         param(
             [Parameter(Mandatory = $true)][string]$PythonExe,
@@ -75,15 +88,15 @@ try {
         $venvPython = Join-Path $venvDir "Scripts\python.exe"
 
         if (Test-Path $venvPython) {
-            & $venvPython -m pip --version > $null 2>&1
+            Invoke-Native { & $venvPython -m pip --version } | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[install] Reusing existing Python venv..."
                 return
             }
 
             Write-Host "[install] Existing venv is missing pip. Trying to repair it..."
-            & $venvPython -m ensurepip --upgrade > $null 2>&1
-            & $venvPython -m pip --version > $null 2>&1
+            Invoke-Native { & $venvPython -m ensurepip --upgrade } | Out-Null
+            Invoke-Native { & $venvPython -m pip --version } | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[install] Repaired existing Python venv."
                 return
@@ -99,19 +112,19 @@ try {
         }
 
         Write-Host "[install] Creating Python venv..."
-        & $PythonExe -m venv $venvDir --clear --copies 2>$null
+        Invoke-Native { & $PythonExe -m venv $venvDir --clear --copies }
         if ($LASTEXITCODE -eq 0 -and (Test-Path $venvPython)) { return }
 
         # Retry without --copies (some Windows installs don't support it)
         Write-Host "[install] Retrying venv creation without --copies..."
         if (Test-Path $venvDir) { Remove-PathWithRetry $venvDir | Out-Null }
-        & $PythonExe -m venv $venvDir --clear 2>$null
+        Invoke-Native { & $PythonExe -m venv $venvDir --clear }
         if ($LASTEXITCODE -eq 0 -and (Test-Path $venvPython)) { return }
 
         # Final retry: bare minimum
         Write-Host "[install] Retrying with bare venv creation..."
         if (Test-Path $venvDir) { Remove-PathWithRetry $venvDir | Out-Null }
-        & $PythonExe -m venv $venvDir
+        Invoke-Native { & $PythonExe -m venv $venvDir }
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $venvPython)) {
             throw "Failed to create Python virtual environment. Try manually: $PythonExe -m venv `"$venvDir`""
         }
