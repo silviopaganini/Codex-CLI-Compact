@@ -405,11 +405,6 @@ try {
     Write-Host "[install] Installing Python dependencies..."
     & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --upgrade pip --quiet
     & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette --quiet
-    if (Get-Command python3 -ErrorAction SilentlyContinue) {
-        & python3 -m pip install --user "mcp>=1.3.0" --quiet
-    } elseif (Get-Command python -ErrorAction SilentlyContinue) {
-        & python -m pip install --user "mcp>=1.3.0" --quiet
-    }
 
     # Verify mcp is importable
     $step = "Verifying MCP import"
