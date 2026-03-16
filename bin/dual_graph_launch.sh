@@ -722,8 +722,20 @@ echo "[$TOOL_LABEL] Scanning project..."
 CURRENT_STEP="Scanning project"
 _SCAN_ERR_FILE="$DATA_DIR/scan_error.log"
 rm -f "$_SCAN_ERR_FILE" 2>/dev/null || true
-if ! "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
-  echo "[$TOOL_LABEL] Error: project scan failed."
+_SCAN_OK=0
+if "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
+  _SCAN_OK=1
+else
+  # Auto-fix: reinstall Python deps and retry once
+  echo "[$TOOL_LABEL] Scan failed — reinstalling Python deps and retrying..."
+  _install_deps "$VENV" 2>/dev/null || true
+  rm -f "$_SCAN_ERR_FILE" 2>/dev/null || true
+  if "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
+    _SCAN_OK=1
+  fi
+fi
+if [[ "$_SCAN_OK" != "1" ]]; then
+  echo "[$TOOL_LABEL] Error: project scan failed after retry."
   _SCAN_TAIL="$(tail -n 20 "$_SCAN_ERR_FILE" 2>/dev/null | tr '\n' ' ' | tr '\r' ' ' | sed 's/[[:space:]]\+/ /g' | cut -c1-700)"
   [[ -z "$_SCAN_TAIL" ]] && _SCAN_TAIL="no stderr captured"
   _send_cli_error "Scanning project" "Project scan failed in dual_graph_launch.sh: $_SCAN_TAIL"
@@ -762,9 +774,36 @@ for i in $(seq 1 20); do
 done
 
 if [[ "$_MCP_READY" != "1" ]]; then
-  echo "[$TOOL_LABEL] Error: MCP server did not start. Check $DATA_DIR/mcp_server.log"
-  _send_cli_error "Starting MCP server" "MCP server did not start in dual_graph_launch.sh"
-  exit 1
+  # Auto-fix: kill stale process, pick new port, restart once
+  echo "[$TOOL_LABEL] MCP server did not start — restarting on new port..."
+  kill "$MCP_PID" 2>/dev/null || true
+  MCP_PORT=$((MCP_PORT + 1))
+  nohup env \
+    DG_DATA_DIR="$DATA_DIR" \
+    DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
+    DG_BASE_URL="http://localhost:$MCP_PORT" \
+    PORT="$MCP_PORT" \
+    "$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" \
+    >> "$DATA_DIR/mcp_server.log" 2>&1 &
+  MCP_PID=$!
+  echo "$MCP_PID" > "$DATA_DIR/mcp_server.pid"
+  echo "$MCP_PORT" > "$DATA_DIR/mcp_port"
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"' EXIT INT TERM
+  _MCP_READY=0
+  for i in $(seq 1 15); do
+    if nc -z localhost "$MCP_PORT" 2>/dev/null || \
+       python3 -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('127.0.0.1',$MCP_PORT))==0 else 1)" 2>/dev/null; then
+      _MCP_READY=1
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$_MCP_READY" != "1" ]]; then
+    echo "[$TOOL_LABEL] Error: MCP server did not start after retry. Check $DATA_DIR/mcp_server.log"
+    _send_cli_error "Starting MCP server" "MCP server did not start in dual_graph_launch.sh (retried)"
+    exit 1
+  fi
+  echo "[$TOOL_LABEL] MCP server recovered on port $MCP_PORT."
 fi
 
 echo "[$TOOL_LABEL] MCP server ready on port $MCP_PORT (PID $MCP_PID)."
@@ -917,35 +956,120 @@ fi
 
 if [[ "$ASSISTANT" == "codex" ]]; then
   CURRENT_STEP="Registering MCP"
+
+  # Auto-install codex CLI if missing
+  if ! command -v codex &>/dev/null; then
+    echo "[$TOOL_LABEL] codex CLI not found — installing..."
+    if command -v npm &>/dev/null; then
+      npm install -g @openai/codex >/dev/null 2>&1 || true
+    fi
+    # Refresh PATH for npm global bin
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+    if ! command -v codex &>/dev/null; then
+      echo "[$TOOL_LABEL] ERROR: could not auto-install codex CLI."
+      echo "[$TOOL_LABEL]   npm install -g @openai/codex"
+      _send_cli_error "Registering MCP" "codex CLI not found, auto-install failed"
+      exit 1
+    fi
+    echo "[$TOOL_LABEL] codex CLI installed."
+  fi
+
+  # Auto-install mcp-remote if missing (Codex needs stdio bridge)
+  if ! command -v mcp-remote &>/dev/null && ! npx mcp-remote --help &>/dev/null 2>&1; then
+    echo "[$TOOL_LABEL] mcp-remote not found — installing..."
+    npm install -g mcp-remote >/dev/null 2>&1 || true
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
+  fi
+
   codex mcp remove dual-graph >/dev/null 2>&1 || true
   # Codex CLI only supports stdio MCP — use mcp-remote to bridge HTTP->stdio
-  if codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+  _CODEX_REG_OK=0
+  _CODEX_REG_ERR=""
+  # Try npx first, then global mcp-remote
+  if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    _CODEX_REG_OK=1
+  elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    _CODEX_REG_OK=1
+  fi
+
+  if [[ "$_CODEX_REG_OK" != "1" ]]; then
+    # Auto-fix: reinstall both deps and retry once
+    echo "[$TOOL_LABEL] MCP registration failed — reinstalling deps and retrying..."
+    npm install -g @openai/codex mcp-remote >/dev/null 2>&1 || true
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
+    codex mcp remove dual-graph >/dev/null 2>&1 || true
+    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+      _CODEX_REG_OK=1
+    elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+      _CODEX_REG_OK=1
+    fi
+  fi
+
+  if [[ "$_CODEX_REG_OK" == "1" ]]; then
     echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp (via mcp-remote)"
   else
-    echo "[$TOOL_LABEL] Error: failed to register MCP with codex."
-    _send_cli_error "Registering MCP" "MCP registration failed in dual_graph_launch.sh (codex)"
+    echo "[$TOOL_LABEL] Error: failed to register MCP with codex after auto-fix."
+    echo "[$TOOL_LABEL] stderr: $_CODEX_REG_ERR"
+    echo "[$TOOL_LABEL] Manual fix:"
+    echo "[$TOOL_LABEL]   npm install -g @openai/codex mcp-remote"
+    echo "[$TOOL_LABEL]   Then run dg again."
+    echo "[$TOOL_LABEL] If it still fails, join Discord: https://discord.gg/rxgVVgCh"
+    _send_cli_error "Registering MCP" "MCP registration failed after auto-fix (codex): $_CODEX_REG_ERR"
     exit 1
   fi
 else
   CURRENT_STEP="Registering MCP"
+
+  # Auto-install claude CLI if missing
+  if ! command -v claude &>/dev/null; then
+    echo "[$TOOL_LABEL] claude CLI not found — installing..."
+    if command -v npm &>/dev/null; then
+      npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || true
+    fi
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+    if ! command -v claude &>/dev/null; then
+      echo "[$TOOL_LABEL] ERROR: could not auto-install claude CLI."
+      echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code"
+      _send_cli_error "Registering MCP" "claude CLI not found, auto-install failed"
+      exit 1
+    fi
+    echo "[$TOOL_LABEL] claude CLI installed."
+  fi
+
   claude mcp remove dual-graph >/dev/null 2>&1 || true
   _MCP_REG_OK=0
-  if claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+  _MCP_REG_ERR=""
+  if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
     _MCP_REG_OK=1
-  elif claude mcp add --transport sse dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+  elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
     _MCP_REG_OK=1
-  elif claude mcp add dual-graph "http://localhost:$MCP_PORT/mcp" >/dev/null 2>&1; then
+  elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
     _MCP_REG_OK=1
   fi
+
   if [[ "$_MCP_REG_OK" != "1" ]]; then
-    echo "[$TOOL_LABEL] Error: failed to register MCP with claude."
-    echo "[$TOOL_LABEL] Try this:"
-    echo "[$TOOL_LABEL] 1. Update Claude Code CLI:"
-    echo "[$TOOL_LABEL]    npm install -g @anthropic-ai/claude-code"
-    echo "[$TOOL_LABEL] 2. Wait 5 minutes and run dgc again."
-    echo "[$TOOL_LABEL] 3. If it still fails, open an issue on GitHub or join Discord:"
-    echo "[$TOOL_LABEL]    https://discord.gg/rxgVVgCh"
-    _send_cli_error "Registering MCP" "MCP registration failed in dual_graph_launch.sh (claude)"
+    # Auto-fix: update CLI and retry once
+    echo "[$TOOL_LABEL] MCP registration failed — updating claude CLI and retrying..."
+    npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || true
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
+    claude mcp remove dual-graph >/dev/null 2>&1 || true
+    if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+      _MCP_REG_OK=1
+    elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+      _MCP_REG_OK=1
+    elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+      _MCP_REG_OK=1
+    fi
+  fi
+
+  if [[ "$_MCP_REG_OK" != "1" ]]; then
+    echo "[$TOOL_LABEL] Error: failed to register MCP with claude after auto-fix."
+    echo "[$TOOL_LABEL] stderr: $_MCP_REG_ERR"
+    echo "[$TOOL_LABEL] Manual fix:"
+    echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code"
+    echo "[$TOOL_LABEL]   Then run dgc again."
+    echo "[$TOOL_LABEL] If it still fails, join Discord: https://discord.gg/rxgVVgCh"
+    _send_cli_error "Registering MCP" "MCP registration failed after auto-fix (claude): $_MCP_REG_ERR"
     exit 1
   fi
   echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
@@ -1005,27 +1129,20 @@ fi
 # ── Pre-flight checks ────────────────────────────────────────────────────────
 CURRENT_STEP="Pre-flight checks"
 
-# 1. Verify the CLI tool is installed and in PATH
+# 1. Verify the CLI tool is installed and in PATH (should already be fixed at registration step, but double-check)
 if ! command -v "$ASSISTANT" &>/dev/null; then
-  echo "[$TOOL_LABEL] ERROR: '$ASSISTANT' CLI not found in PATH."
-  if [[ "$ASSISTANT" == "claude" ]]; then
-    echo "[$TOOL_LABEL] Install Claude Code:"
-    echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code"
-  else
-    echo "[$TOOL_LABEL] Install Codex CLI:"
-    echo "[$TOOL_LABEL]   npm install -g @openai/codex"
+  # Refresh PATH one more time
+  export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+  if ! command -v "$ASSISTANT" &>/dev/null; then
+    echo "[$TOOL_LABEL] ERROR: '$ASSISTANT' CLI not found in PATH."
+    if [[ "$ASSISTANT" == "claude" ]]; then
+      echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code"
+    else
+      echo "[$TOOL_LABEL]   npm install -g @openai/codex"
+    fi
+    _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found after auto-install"
+    exit 1
   fi
-  # Check if npm/node exist
-  if ! command -v node &>/dev/null; then
-    echo "[$TOOL_LABEL]"
-    echo "[$TOOL_LABEL] Node.js is also missing. Install Node.js 18+ first:"
-    echo "[$TOOL_LABEL]   https://nodejs.org/en/download"
-    echo "[$TOOL_LABEL]   Or: curl -fsSL https://fnm.vercel.app/install | bash && fnm install 22"
-    _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found AND Node.js missing"
-  else
-    _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found (node=$(node -v 2>/dev/null || echo unknown))"
-  fi
-  exit 1
 fi
 
 # 2. Verify Node.js version >= 18 (Claude Code requirement)
@@ -1081,19 +1198,23 @@ ASSISTANT_EXIT=$?
 set -e
 
 # Ignore normal termination: 0=clean, 130=SIGINT (Ctrl+C), 143=SIGTERM
-if [[ "$ASSISTANT" == "claude" && "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" -ne 143 ]]; then
+if [[ "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" -ne 143 ]]; then
   _STDERR_TAIL="$(tail -n 10 "$DATA_DIR/assistant_stderr.log" 2>/dev/null | tr '\n' ' ' | cut -c1-500)"
   echo ""
-  echo "[$TOOL_LABEL] Claude exited with code $ASSISTANT_EXIT."
+  echo "[$TOOL_LABEL] $ASSISTANT exited with code $ASSISTANT_EXIT."
   if [[ -n "$_STDERR_TAIL" ]]; then
     echo "[$TOOL_LABEL] Error output: $_STDERR_TAIL"
   fi
   echo "[$TOOL_LABEL] Troubleshooting:"
-  echo "[$TOOL_LABEL]   1. Update Claude Code: npm install -g @anthropic-ai/claude-code"
-  echo "[$TOOL_LABEL]   2. Check your API key: claude config"
-  echo "[$TOOL_LABEL]   3. Try running 'claude' directly to see if it works"
+  if [[ "$ASSISTANT" == "claude" ]]; then
+    echo "[$TOOL_LABEL]   1. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+  else
+    echo "[$TOOL_LABEL]   1. Update Codex: npm install -g @openai/codex"
+  fi
+  echo "[$TOOL_LABEL]   2. Try running '$ASSISTANT' directly to see if it works"
+  echo "[$TOOL_LABEL]   3. Run dgc again — it may be a transient issue"
   echo "[$TOOL_LABEL]   4. Join Discord for help: https://discord.gg/rxgVVgCh"
-  _send_cli_error "Running Claude" "Claude exited=$ASSISTANT_EXIT stderr=$_STDERR_TAIL"
+  _send_cli_error "Running $ASSISTANT" "$ASSISTANT exited=$ASSISTANT_EXIT stderr=$_STDERR_TAIL"
 fi
 # Clean up stderr log on success
 [[ "$ASSISTANT_EXIT" -eq 0 ]] && rm -f "$DATA_DIR/assistant_stderr.log" 2>/dev/null
