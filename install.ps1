@@ -56,6 +56,12 @@ try {
         if (-not (Test-Path $Path)) { return $true }
         for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
             try {
+                # Use cmd rmdir first — PowerShell Remove-Item -Recurse has
+                # long-standing bugs with venv directories on Windows.
+                if (Test-Path $Path -PathType Container) {
+                    cmd /c "rmdir /s /q `"$Path`"" 2>$null
+                    if (-not (Test-Path $Path)) { return $true }
+                }
                 Remove-Item $Path -Recurse -Force -ErrorAction Stop
                 return $true
             } catch {
