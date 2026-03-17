@@ -294,7 +294,7 @@ function Create-Venv([string]$PyExe, [string]$VenvDir) {
 try {
     if (-not (Test-Path $DG)) { New-Item -ItemType Directory -Force -Path $DG | Out-Null }
 
-    # -- Self-update check (FIRST — before venv/graperoot so stuck users always escape) --
+    # -- Self-update check (FIRST -- before venv/graperoot so stuck users always escape) --
     $localVer = "0"
     $versionFile = Join-Path $DG "version.txt"
     if (Test-Path $versionFile) { $localVer = (Get-Content $versionFile -Raw).Trim() }
@@ -423,7 +423,7 @@ try {
     if (-not $grapeOk) {
         $pyFallback = Join-Path $DG "graph_builder.py"
         if (-not (Test-Path $pyFallback)) {
-            Write-Host "[$Tool] graperoot missing and no .py fallback — retrying install..."
+            Write-Host "[$Tool] graperoot missing and no .py fallback -- retrying install..."
             if ((Invoke-NativeQuiet $pip @("install", "graperoot", "--upgrade", "--quiet", "--no-cache-dir")) -eq 0) {
                 $grapeOk = $true
             } else {
@@ -454,7 +454,7 @@ try {
     $DocFile = Join-Path $resolvedProject "CLAUDE.md"
     $Gitignore = Join-Path $resolvedProject ".gitignore"
 
-    # (version check already ran at top of script — just set forcePolicyWrite for CLAUDE.md)
+    # (version check already ran at top of script -- just set forcePolicyWrite for CLAUDE.md)
     $forcePolicyWrite = $false
     $versionFile = Join-Path $DG "version.txt"
     $localVer = if (Test-Path $versionFile) { (Get-Content $versionFile -Raw).Trim() } else { "0" }
