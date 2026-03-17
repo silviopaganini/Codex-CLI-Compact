@@ -458,6 +458,45 @@ fi
 
 PYTHON="$VENV/bin/python3"
 
+# ── Auto-install compiled graperoot package (falls back to .py if it fails) ──
+_GRAPEROOT_OK=0
+
+# Already installed — just verify import works
+if "$PYTHON" -c "import graperoot" 2>/dev/null; then
+  _GRAPEROOT_OK=1
+else
+  # Not installed yet — try pip install silently (first run only, ~5s)
+  if "$VENV/bin/pip" install graperoot --upgrade --quiet 2>/dev/null; then
+    _GRAPEROOT_OK=1
+  fi
+  # If pip fails (network, wrong Python version, etc.) — silent fallback to .py
+fi
+
+# Once compiled package is confirmed working, delete .py source files
+if [[ "$_GRAPEROOT_OK" == "1" ]]; then
+  rm -f "$SCRIPT_DIR/graph_builder.py" \
+        "$SCRIPT_DIR/dg.py" \
+        "$SCRIPT_DIR/mcp_graph_server.py" \
+        "$SCRIPT_DIR/context_packer.py" \
+        "$SCRIPT_DIR/dgc_claude.py" 2>/dev/null || true
+fi
+
+# Helper: run graph_builder (compiled or .py)
+_run_graph_builder() {
+  if [[ "$_GRAPEROOT_OK" == "1" ]]; then
+    "$VENV/bin/graph-builder" "$@"
+  else
+    "$PYTHON" "$SCRIPT_DIR/graph_builder.py" "$@"
+  fi
+}
+
+# Resolve MCP server to a real executable array (env/nohup can't call shell functions)
+if [[ "$_GRAPEROOT_OK" == "1" ]]; then
+  _MCP_CMD=("$VENV/bin/mcp-graph-server")
+else
+  _MCP_CMD=("$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py")
+fi
+
 echo "[$TOOL_LABEL] Project : $PROJECT"
 echo "[$TOOL_LABEL] Data    : $DATA_DIR"
 echo ""
@@ -728,14 +767,14 @@ CURRENT_STEP="Scanning project"
 _SCAN_ERR_FILE="$DATA_DIR/scan_error.log"
 rm -f "$_SCAN_ERR_FILE" 2>/dev/null || true
 _SCAN_OK=0
-if "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
+if _run_graph_builder --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
   _SCAN_OK=1
 else
   # Auto-fix: reinstall Python deps and retry once
   echo "[$TOOL_LABEL] Scan failed — reinstalling Python deps and retrying..."
   _install_deps "$VENV" 2>/dev/null || true
   rm -f "$_SCAN_ERR_FILE" 2>/dev/null || true
-  if "$PYTHON" "$SCRIPT_DIR/graph_builder.py" --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
+  if _run_graph_builder --root "$PROJECT" --out "$DATA_DIR/info_graph.json" 2>"$_SCAN_ERR_FILE"; then
     _SCAN_OK=1
   fi
 fi
@@ -759,7 +798,7 @@ nohup env \
   DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
   DG_BASE_URL="http://localhost:$MCP_PORT" \
   PORT="$MCP_PORT" \
-  "$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" \
+  "${_MCP_CMD[@]}" \
   >> "$DATA_DIR/mcp_server.log" 2>&1 &
 MCP_PID=$!
 echo "$MCP_PID" > "$DATA_DIR/mcp_server.pid"
@@ -788,7 +827,7 @@ if [[ "$_MCP_READY" != "1" ]]; then
     DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
     DG_BASE_URL="http://localhost:$MCP_PORT" \
     PORT="$MCP_PORT" \
-    "$PYTHON" "$SCRIPT_DIR/mcp_graph_server.py" \
+    "${_MCP_CMD[@]}" \
     >> "$DATA_DIR/mcp_server.log" 2>&1 &
   MCP_PID=$!
   echo "$MCP_PID" > "$DATA_DIR/mcp_server.pid"

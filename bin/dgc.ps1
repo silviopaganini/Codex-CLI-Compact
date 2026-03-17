@@ -369,6 +369,26 @@ try {
         Write-Host "[$Tool] Dependencies installed."
     }
 
+    # Ensure pip/bin paths set even when venv already existed
+    $pip = Join-Path $DG "venv\Scripts\pip.exe"
+    $VenvBin = Join-Path $DG "venv\Scripts"
+
+    # Auto-install compiled graperoot package (silent fallback to .py if it fails)
+    $grapeOk = $false
+    if ((Invoke-NativeQuiet $Python @("-c", "import graperoot")) -eq 0) {
+        $grapeOk = $true
+    } else {
+        if ((Invoke-NativeQuiet $pip @("install", "graperoot", "--upgrade", "--quiet")) -eq 0) {
+            $grapeOk = $true
+        }
+    }
+    # Delete .py source files once compiled package confirmed working
+    if ($grapeOk) {
+        @("graph_builder.py", "dg.py", "mcp_graph_server.py", "context_packer.py", "dgc_claude.py") | ForEach-Object {
+            Remove-Item (Join-Path $DG $_) -ErrorAction SilentlyContinue
+        }
+    }
+
     # Use Get-Item to get the canonical Windows path with correct casing
     # (Resolve-Path preserves whatever casing the user typed, which can cause os error 123)
     $resolvedProject = (Get-Item -LiteralPath (Resolve-Path -LiteralPath $ProjectPath).Path).FullName
@@ -461,7 +481,11 @@ try {
     Write-Host "[$Tool] Data    : $DataDir"
     Write-Host ""
     Write-Host "[$Tool] Scanning project..."
-    & $Python (Join-Path $DG "graph_builder.py") --root $resolvedProject --out (Join-Path $DataDir "info_graph.json") 2> $scanErr
+    if ($grapeOk) {
+        & (Join-Path $VenvBin "graph-builder.exe") --root $resolvedProject --out (Join-Path $DataDir "info_graph.json") 2> $scanErr
+    } else {
+        & $Python (Join-Path $DG "graph_builder.py") --root $resolvedProject --out (Join-Path $DataDir "info_graph.json") 2> $scanErr
+    }
     if ($LASTEXITCODE -ne 0) {
         $tail = "no stderr captured"
         if (Test-Path $scanErr) {
@@ -508,7 +532,11 @@ try {
     $env:DUAL_GRAPH_PROJECT_ROOT = $resolvedProject
     $env:DG_BASE_URL = "http://localhost:$port"
     $env:PORT = "$port"
-    $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+    if ($grapeOk) {
+        $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -ArgumentList @() -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+    } else {
+        $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+    }
     Set-Content -Path $pidFile -Value "$($server.Id)" -Encoding UTF8
     Set-Content -Path $portFile -Value "$port" -Encoding UTF8
     if (-not (Wait-Port -Port $port)) {
