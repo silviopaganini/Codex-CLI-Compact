@@ -365,10 +365,7 @@ try {
     # ── Download core engine ──────────────────────────────────────────────────────
     $step = "Downloading core engine"
     Write-Host "[install] Downloading core engine..."
-    Invoke-WebRequestWithRetry -Uri "$R2/mcp_graph_server.py"  -OutFile "$INSTALL_DIR\mcp_graph_server.py"  -Label "Download mcp_graph_server.py"
-    Invoke-WebRequestWithRetry -Uri "$R2/graph_builder.py"     -OutFile "$INSTALL_DIR\graph_builder.py"     -Label "Download graph_builder.py"
     Invoke-WebRequestWithRetry -Uri "$R2/dual_graph_launch.sh" -OutFile "$INSTALL_DIR\dual_graph_launch.sh" -Label "Download dual_graph_launch.sh"
-    Invoke-WebRequestWithRetry -Uri "$R2/dg.py"                -OutFile "$INSTALL_DIR\dg.py"                -Label "Download dg.py"
 
     $step = "Downloading CLI wrappers"
     Write-Host "[install] Downloading CLI wrappers..."
@@ -404,14 +401,14 @@ try {
     $step = "Installing Python dependencies"
     Write-Host "[install] Installing Python dependencies..."
     & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --upgrade pip --quiet
-    & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette --quiet
+    & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette graperoot --quiet
 
     # Verify mcp is importable
     $step = "Verifying MCP import"
     $check = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>&1
     if ($check -ne "ok") {
         Write-Host "[install] Warning: mcp import check failed. Retrying install..."
-        & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette
+        & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette graperoot
         $check = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>&1
         if ($check -ne "ok") {
             throw "Failed to install 'mcp' Python package."
