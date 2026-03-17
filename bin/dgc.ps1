@@ -294,6 +294,14 @@ function Create-Venv([string]$PyExe, [string]$VenvDir) {
 try {
     if (-not (Test-Path $DG)) { New-Item -ItemType Directory -Force -Path $DG | Out-Null }
 
+    # -- Clean up stale venv tombstones in background (venv._old_* and venv._broken_*) --
+    Get-ChildItem -Path $DG -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^venv\.(_old_|_broken_)' } |
+        ForEach-Object {
+            $stale = $_.FullName
+            Start-Job -ScriptBlock { cmd /c "rmdir /s /q `"$using:stale`"" } -ErrorAction SilentlyContinue | Out-Null
+        }
+
     # -- Self-update check (FIRST -- before venv/graperoot so stuck users always escape) --
     $localVer = "0"
     $versionFile = Join-Path $DG "version.txt"
