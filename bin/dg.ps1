@@ -421,7 +421,7 @@ try {
     $env:DG_BASE_URL = "http://localhost:$port"
     $env:DG_MCP_PORT = "$port"
     if ($grapeOk) {
-        $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -ArgumentList @() -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+        $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
     } else {
         $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
     }
@@ -435,7 +435,7 @@ try {
         $env:DG_BASE_URL = "http://localhost:$port"
         $env:DG_MCP_PORT = "$port"
         if ($grapeOk) {
-            $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -ArgumentList @() -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+            $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
         } else {
             $server = Start-Process -FilePath $Python -ArgumentList @((Join-Path $DG "mcp_graph_server.py")) -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
         }
