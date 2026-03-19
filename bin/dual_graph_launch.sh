@@ -481,9 +481,15 @@ fi
 # ── Auto-install compiled graperoot package (falls back to .py if it fails) ──
 _GRAPEROOT_OK=0
 
-# Already installed — just verify import works
-if "$PYTHON" -c "import graperoot" 2>/dev/null; then
+# Already installed — verify graph_builder submodule is importable (not just graperoot)
+if "$PYTHON" -c "import graperoot.graph_builder" 2>/dev/null; then
   _GRAPEROOT_OK=1
+elif "$PYTHON" -c "import graperoot" 2>/dev/null; then
+  # graperoot imports but graph_builder submodule missing (broken sdist install) — upgrade
+  echo "[$TOOL_LABEL] graperoot.graph_builder missing — upgrading graperoot..."
+  if "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null; then
+    _GRAPEROOT_OK=1
+  fi
 else
   # Not installed yet — try pip install silently (first run only, ~5s)
   if "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null; then
