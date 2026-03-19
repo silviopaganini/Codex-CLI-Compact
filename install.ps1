@@ -94,9 +94,10 @@ try {
         $venvPython = Join-Path $venvDir "Scripts\python.exe"
         $venvCfg = Join-Path $venvDir "pyvenv.cfg"
 
-        # Step 1: Kill all processes using our install dir BEFORE touching the venv.
-        # pywin32 DLLs (pywintypes311.dll) get locked as soon as any process in the
-        # venv loads them. Killing first ensures they are unlocked for uninstall/removal.
+        # Step 1: Kill all processes holding venv files open.
+        # First try targeted kill via WMI CommandLine — works for normal processes.
+        # WMI CommandLine is empty for protected/system processes (e.g. Claude Code's MCP
+        # server), so the targeted kill is silently a no-op in that case.
         try {
             Get-Process | Where-Object {
                 try { $_.Path -and $_.Path.StartsWith($InstallDir) } catch { $false }
@@ -108,6 +109,29 @@ try {
                 ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
             Start-Sleep -Milliseconds 500
         } catch {}
+        # Also use taskkill — it works across terminal sessions where Stop-Process gets Access Denied
+        try { & taskkill /F /IM "mcp-graph-server.exe" /T 2>$null } catch {}
+        try { & taskkill /F /IM "graph-builder.exe" /T 2>$null } catch {}
+
+        # Fallback: if a venv .pyd is still locked after targeted kills, the locking process
+        # returned empty WMI CommandLine (protected process, e.g. Claude Code MCP server).
+        # Probe the file directly — if locked, kill ALL python.exe as a last resort.
+        $probePyd = Get-ChildItem (Join-Path $venvDir "Lib\site-packages\graperoot") -Filter "*.pyd" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($probePyd) {
+            $locked = $false
+            try {
+                $stream = [System.IO.File]::Open($probePyd.FullName, 'Open', 'ReadWrite', 'None')
+                $stream.Close()
+            } catch [System.IO.IOException] {
+                $locked = $true
+            } catch {}
+            if ($locked) {
+                Write-Host "[install] Venv DLL is still locked — stopping all Python processes..."
+                try { & taskkill /F /IM "python.exe" /T 2>$null } catch {}
+                try { & taskkill /F /IM "pythonw.exe" /T 2>$null } catch {}
+                Start-Sleep -Milliseconds 1000
+            }
+        }
 
         # Step 2: Neutralise any orphaned pywin32 left by a previous installer version.
         # pip uninstall exits 0 but leaves pywin32.pth behind when the DLL is locked.
