@@ -568,6 +568,17 @@ try {
     Write-Host "[$Tool] MCP server ready on port $port."
     Write-Host ""
 
+    # Pre-check: claude must be in PATH
+    $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
+    if (-not $claudeCmd) {
+        $msg = "Claude Code CLI not found in PATH. Install it with: npm install -g @anthropic-ai/claude-code"
+        Write-Host "[$Tool] ERROR: $msg" -ForegroundColor Red
+        Write-Host "[$Tool] After installing, close and reopen your terminal, then run dgc again."
+        Send-CliError "Checking prerequisites" $msg
+        Stop-McpServer $pidFile $portFile
+        exit 1
+    }
+
     # PowerShell 7 can treat non-zero native exits as terminating errors.
     # Handle Claude CLI exits explicitly so "not found" on remove stays harmless.
     Remove-ClaudeMcpSafe "dual-graph"
@@ -799,10 +810,14 @@ if ($transcript -and (Test-Path $transcript)) {
     Remove-Item Env:\PORT -ErrorAction SilentlyContinue
     $hasNativePref = Test-Path variable:PSNativeCommandUseErrorActionPreference
     if ($hasNativePref) { $prevNativePref = $PSNativeCommandUseErrorActionPreference; $global:PSNativeCommandUseErrorActionPreference = $false }
+    # Use Continue so npm stderr notices (e.g. "npm notice update available") don't become
+    # terminating errors under the global $ErrorActionPreference = "Stop".
+    $prevEAPClaude = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     try {
         & claude
         $claudeExit = $LASTEXITCODE
     } finally {
+        $ErrorActionPreference = $prevEAPClaude
         Pop-Location
         if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $prevNativePref }
     }
