@@ -302,7 +302,7 @@ echo "[install] Creating Python venv at $VENV ..."
 
 echo "[install] Installing Python dependencies..."
 "$VENV/bin/pip" install --upgrade pip --quiet
-"$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette graperoot --quiet
+"$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
 
 # Add to PATH if not already there
 SHELL_RC="$HOME/.zshrc"

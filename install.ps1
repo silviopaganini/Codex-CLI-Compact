@@ -401,14 +401,14 @@ try {
     $step = "Installing Python dependencies"
     Write-Host "[install] Installing Python dependencies..."
     & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --upgrade pip --quiet
-    & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette graperoot --quiet
+    & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette --quiet
 
     # Verify mcp is importable
     $step = "Verifying MCP import"
     $checkOut = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>$null
     if ($checkOut -ne "ok") {
         Write-Host "[install] Warning: mcp import check failed. Retrying with --force-reinstall..."
-        & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --force-reinstall "mcp>=1.3.0" uvicorn anyio starlette graperoot --quiet
+        & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --force-reinstall "mcp>=1.3.0" uvicorn anyio starlette --quiet
         $checkOut = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>$null
         if ($checkOut -ne "ok") {
             # Capture the actual error for telemetry
