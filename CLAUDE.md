@@ -52,7 +52,7 @@ Live dashboard URL is printed at startup next to "Token usage".
 - `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them.
 - Do NOT dump full chat history.
 - Do NOT call `graph_retrieve` more than once per turn.
-- After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
+- After edits, call `graph_register_edit(files: ["path/to/file"])` — the parameter is **`files` (plural, always an array)**. Never pass `file` (singular). Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
 
 ## Releasing
 
@@ -74,7 +74,7 @@ Whenever you make a decision, identify a task, note a next step, fact, or blocke
 {"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
 ```
 
-**To append:** Read the file → add the new entry to the array → Write it back → call `graph_register_edit` on `.dual-graph/context-store.json`.
+**To append:** Read the file → add the new entry to the array → Write it back → call `graph_register_edit(files: [".dual-graph/context-store.json"])`.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)
