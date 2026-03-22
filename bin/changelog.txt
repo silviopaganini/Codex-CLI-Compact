@@ -1,3 +1,7 @@
+3.9.4
+- Added: Unreal Engine 5 support (UCLASS, USTRUCT, UFUNCTION, UENUM macros) in graph_builder
+- Fixed: dgc not found on macOS bash — install.sh now writes to ~/.bash_profile
+
 3.9.3
 - Fixed: dgc no longer hangs on Cloudflare-blocked ISPs (Turkey etc) — CLAUDE.md uses hardcoded fallback
 - Added: C and C++ language support (.c .cpp .h .hpp) in graph_builder

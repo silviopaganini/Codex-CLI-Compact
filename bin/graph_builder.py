@@ -21,6 +21,8 @@ SKIP_DIRS = {
     ".git", ".beads", ".beads-hooks", "node_modules", "vendor",
     "dist", "build", ".next", ".idea", ".vscode", "__pycache__",
     "venv", ".venv", ".dual-graph",
+    # UE5 / Unreal Engine build artifact directories
+    "Intermediate", "Binaries", "DerivedDataCache", "Saved",
 }
 
 MAX_FILE_BYTES = 300_000
@@ -826,11 +828,45 @@ def extract_symbols_c_cpp(content: str, file_path: str) -> list[dict]:
         })
 
     SKIP = {"if", "for", "while", "switch", "return", "sizeof", "catch", "else", "do"}
-    # Classes, structs, enums, unions, namespaces
-    for m in re.finditer(r"^(?:class|struct|enum|union|namespace)\s+([A-Za-z_]\w*)", text, re.MULTILINE):
-        sym_type = "model" if m.group(0).startswith(("class", "struct", "union", "enum")) else "namespace"
-        add_sym(m.group(1), text[:m.start()].count("\n"), sym_type, True)
-    # Functions: return_type name( — must not end with ; (declaration vs definition)
+
+    # UE5: UCLASS/USTRUCT/UINTERFACE macro immediately before class/struct declaration
+    for m in re.finditer(
+        r"^(?:UCLASS|USTRUCT|UINTERFACE)\s*\([^)]*\)\s*\n\s*(?:class|struct)\s+(?:\w+_API\s+)?([A-Za-z_]\w*)",
+        text, re.MULTILINE,
+    ):
+        add_sym(m.group(1), text[:m.start()].count("\n"), "model", True)
+
+    # UE5: UENUM macro immediately before enum declaration
+    for m in re.finditer(
+        r"^UENUM\s*\([^)]*\)\s*\n\s*enum\s+(?:class\s+)?(?:\w+_API\s+)?([A-Za-z_]\w*)",
+        text, re.MULTILINE,
+    ):
+        add_sym(m.group(1), text[:m.start()].count("\n"), "model", True)
+
+    # UE5: UFUNCTION macro immediately before a function declaration (may be indented)
+    for m in re.finditer(
+        r"^\s*UFUNCTION\s*\([^)]*\)\s*\n\s*(?:virtual\s+|static\s+|FORCEINLINE\s+)*[\w:*&<>\s]+?\s+([A-Za-z_]\w*)\s*\(",
+        text, re.MULTILINE,
+    ):
+        name = m.group(1)
+        if name not in SKIP:
+            add_sym(name, text[:m.start()].count("\n"), "use_case", True)
+
+    # Regular classes, structs, enums, unions, namespaces (strip _API export macro if present)
+    # Handle both `enum Name` and `enum class Name`; allow indentation
+    for m in re.finditer(
+        r"^\s*(?:class|struct|union|namespace)\s+(?:\w+_API\s+)?([A-Za-z_]\w*)"
+        r"|^\s*enum\s+(?:class\s+)?(?:\w+_API\s+)?([A-Za-z_]\w*)",
+        text, re.MULTILINE,
+    ):
+        name = m.group(1) or m.group(2)
+        if not name:
+            continue
+        keyword = m.group(0).lstrip().split()[0]
+        sym_type = "utility" if keyword == "namespace" else "model"
+        add_sym(name, text[:m.start()].count("\n"), sym_type, True)
+
+    # Regular functions: return_type name( — must have body (not just a declaration ending in ;)
     for m in re.finditer(r"^[\w:*&<>\s]+?\s+([A-Za-z_]\w*)\s*\([^;{]*\{", text, re.MULTILINE):
         name = m.group(1)
         if name not in SKIP:
