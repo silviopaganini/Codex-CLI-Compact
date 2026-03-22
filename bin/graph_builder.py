@@ -658,6 +658,20 @@ def _make_summary(content: str, path: str, ext: str) -> str:
                 names.append(name)
                 if len(names) >= 5:
                     break
+    elif ext in {".c", ".cpp", ".h", ".hpp"}:
+        for m2 in re.finditer(r"^(?:class|struct|enum|union|namespace)\s+([A-Za-z_]\w*)", content, re.MULTILINE):
+            name = m2.group(1)
+            if name and name not in names:
+                names.append(name)
+                if len(names) >= 5:
+                    break
+        if len(names) < 5:
+            for m2 in re.finditer(r"^[\w:*&<>\s]+?\s+([A-Za-z_]\w*)\s*\([^;{]*\{", content, re.MULTILINE):
+                name = m2.group(1)
+                if name and name not in {"if", "for", "while", "switch", "return", "sizeof", "catch"} and name not in names:
+                    names.append(name)
+                    if len(names) >= 5:
+                        break
 
     # 3. Infer domain from path segments
     parts = [p for p in re.split(r"[/\\]", path) if p and p != "."]
