@@ -23,7 +23,10 @@ if str(_BIN_DIR) not in _sys.path:
     _sys.path.insert(0, str(_BIN_DIR))
 
 from graph_builder import scan
-from dg import retrieve
+try:
+    from graperoot.dg import retrieve
+except Exception:
+    from dg import retrieve  # type: ignore[no-redef]
 
 
 BASE_DIR = Path(__file__).resolve().parent
