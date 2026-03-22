@@ -4,7 +4,9 @@ A context engine that makes Claude Code and Codex CLI **30-45% cheaper** without
 
 Works on **macOS, Linux, and Windows**. Supports any project size.
 
-**Join the community: [discord.gg/rxgVVgCh](https://discord.gg/rxgVVgCh)**
+Supports **TypeScript, JavaScript, Python, Go, Swift, Rust, Java, Kotlin, C#, Ruby, and PHP**.
+
+**Join the community: [discord.gg/xe7Hr5Dx](https://discord.com/invite/xe7Hr5Dx)**
 
 ---
 
@@ -92,7 +94,7 @@ dg "C:\work\backend"             # Codex CLI
 
 ## What It Does Under the Hood
 
-1. **Scans your project** — extracts files, functions, classes, import relationships into a local graph.
+1. **Scans your project** — extracts files, functions, classes, import relationships into a local graph. Supports TS/JS, Python, Go, Swift, Rust, Java, Kotlin, C#, Ruby, and PHP.
 2. **Pre-loads context** — when you ask a question, the graph ranks relevant files and packs them into the prompt before Claude sees it. No extra tool calls needed.
 3. **Remembers across turns** — files you've read or edited are prioritized in future turns. Context compounds.
 4. **MCP tools available** — Claude can still explore the codebase via graph-aware tools (`graph_read`, `graph_retrieve`, `graph_neighbors`, etc.) when it needs to go deeper.
@@ -172,7 +174,7 @@ Current version: **3.9.0**
 - **All project data stays local.** Graphs, session data, and code never leave your machine.
 - The only outbound calls are:
   - **Version check** — fetches a version string (no project data).
-  - **Heartbeat** — sends `machine_id` and `platform` only. No file names, no code.
+  - **Heartbeat** — sends a random install ID and `platform` only. No hardware fingerprinting, no file names, no code.
   - **One-time feedback** — optional rating after first day of use.
 - `.dual-graph/` is automatically added to `.gitignore`.
 
@@ -212,7 +214,7 @@ Remove-Item "$env:USERPROFILE\.claude\token-counter-stop.ps1" -Force -ErrorActio
 
 Have a question, found a bug, or want to share feedback?
 
-**Join the Discord: [discord.gg/rxgVVgCh](https://discord.gg/rxgVVgCh)**
+**Join the Discord: [discord.gg/xe7Hr5Dx](https://discord.com/invite/xe7Hr5Dx)**
 
 - Get help with setup
 - Report bugs
