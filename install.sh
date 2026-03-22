@@ -280,8 +280,16 @@ echo "[install] Installing Python dependencies..."
 "$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
 
 # Add to PATH if not already there
+# On macOS, bash login shells (new terminal windows) read ~/.bash_profile not ~/.bashrc.
+# zsh always reads ~/.zshrc. Linux bash reads ~/.bashrc.
 SHELL_RC="$HOME/.zshrc"
-[[ "$SHELL" == */bash ]] && SHELL_RC="$HOME/.bashrc"
+if [[ "$SHELL" == */bash ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    SHELL_RC="$HOME/.bash_profile"
+  else
+    SHELL_RC="$HOME/.bashrc"
+  fi
+fi
 if ! grep -q '.dual-graph' "$SHELL_RC" 2>/dev/null; then
   echo 'export PATH="$PATH:$HOME/.dual-graph"' >> "$SHELL_RC"
   echo "[install] Added ~/.dual-graph to PATH in $SHELL_RC"
