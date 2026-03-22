@@ -231,8 +231,8 @@ if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
     echo "$_REMOTE_VER" > "$_NOTICE_FILE" 2>/dev/null || true
   fi
   echo "[$TOOL_LABEL] Update available ($_LOCAL_VER → $_REMOTE_VER) — updating..."
-  curl -fsSL "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
-    || curl -fsSL "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
+  curl -fsSL --max-time 30 "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
+    || curl -fsSL --max-time 30 "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
   chmod +x "$SCRIPT_DIR/dual_graph_launch.sh"
   echo "$_REMOTE_VER" > "$SCRIPT_DIR/version.txt"
   # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
