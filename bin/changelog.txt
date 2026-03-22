@@ -1,0 +1,11 @@
+3.9.2
+- Fixed: dgc no longer hangs on VPN during self-update
+- Added: dgc --resume SESSION_ID to resume sessions with dual-graph active
+- Session resume hint shown automatically at end of each session
+
+3.9.1
+- Fixed: self-update download no longer hangs indefinitely on slow connections
+- Added --max-time 30 to update curl calls
+
+3.9.0
+- Added Rust, Java, C#, Ruby, PHP, Kotlin language support to graph_builder

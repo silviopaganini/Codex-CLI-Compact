@@ -21,9 +21,26 @@ if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* || "$OSTYPE" == win32* ]]; then
 else
   VENV_BIN="$VENV/bin"
 fi
-PROJECT="${1:-$(pwd)}"
+RESUME_ID=""
+PROMPT=""
+_ARG1="${1:-}"
+_ARG2="${2:-}"
+_ARG3="${3:-}"
+if [[ "$_ARG1" == "--resume" ]]; then
+  PROJECT="$(pwd)"
+  RESUME_ID="$_ARG2"
+elif [[ -n "$_ARG1" ]] && [[ "$_ARG1" != --* ]]; then
+  PROJECT="$_ARG1"
+  if [[ "$_ARG2" == "--resume" ]]; then
+    RESUME_ID="$_ARG3"
+  else
+    PROMPT="$_ARG2"
+  fi
+else
+  PROJECT="$(pwd)"
+  PROMPT="$_ARG1"
+fi
 PROJECT="$(cd "$PROJECT" && pwd)"
-PROMPT="${2:-}"
 DATA_DIR="$PROJECT/.dual-graph"
 TELEMETRY_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
 REPORTED_ERROR=0
@@ -239,8 +256,35 @@ if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
   if [[ -x "$VENV_BIN/pip" ]]; then
     "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null || true
   fi
+  # Show changelog for new version (max 3 lines)
+  _CHANGELOG="$(curl -sf --max-time 5 "$_BASE_URL/bin/changelog.txt" 2>/dev/null \
+    || curl -sf --max-time 5 "$_R2/changelog.txt" 2>/dev/null || true)"
+  if [[ -n "$_CHANGELOG" ]]; then
+    _NOTES="$(echo "$_CHANGELOG" | python3 -c "
+import sys
+lines = sys.stdin.read().splitlines()
+ver = None
+notes = []
+for line in lines:
+    if line.strip() == '$_REMOTE_VER':
+        ver = True
+        continue
+    if ver:
+        if line == '' and notes: break
+        if line.startswith('-'): notes.append(line.strip())
+        if len(notes) == 3: break
+for n in notes: print(n)
+" 2>/dev/null || true)"
+    if [[ -n "$_NOTES" ]]; then
+      echo "[$TOOL_LABEL] What's new in $_REMOTE_VER:"
+      while IFS= read -r _note; do
+        echo "[$TOOL_LABEL]   $_note"
+      done <<< "$_NOTES"
+    fi
+  fi
   echo "[$TOOL_LABEL] Updated to $_REMOTE_VER. Restarting..."
   EXEC_ARGS=("$SCRIPT_DIR/dual_graph_launch.sh" "$ASSISTANT" "$PROJECT")
+  [[ -n "$RESUME_ID" ]] && EXEC_ARGS+=("--resume" "$RESUME_ID")
   [[ -n "$PROMPT" ]] && EXEC_ARGS+=("$PROMPT")
   exec "${EXEC_ARGS[@]}"
 elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
@@ -1255,13 +1299,41 @@ CURRENT_STEP="Running Claude"
 # causing spurious "Unhandled launcher failure" telemetry.
 trap - ERR
 set +e
-if [[ -n "$PROMPT" ]]; then
+if [[ -n "$RESUME_ID" ]]; then
+  "$ASSISTANT" --resume "$RESUME_ID" 2>"$DATA_DIR/assistant_stderr.log"
+elif [[ -n "$PROMPT" ]]; then
   "$ASSISTANT" "$PROMPT" 2>"$DATA_DIR/assistant_stderr.log"
 else
   "$ASSISTANT" 2>"$DATA_DIR/assistant_stderr.log"
 fi
 ASSISTANT_EXIT=$?
 set -e
+
+# Show resume hint with actual session ID
+if [[ "$ASSISTANT" == "claude" ]]; then
+  _LAST_SESSION="$(python3 - "$HOME/.claude/history.jsonl" "$PROJECT" <<'PY'
+import sys, json
+from pathlib import Path
+history_file, project = Path(sys.argv[1]), sys.argv[2].rstrip("/")
+if not history_file.exists():
+    sys.exit(0)
+last_id = ""
+for line in history_file.read_text(encoding="utf-8").splitlines():
+    try:
+        d = json.loads(line)
+        if d.get("project", "").rstrip("/") == project and d.get("sessionId"):
+            last_id = d["sessionId"]
+    except Exception:
+        pass
+print(last_id)
+PY
+  2>/dev/null || true)"
+  if [[ -n "$_LAST_SESSION" ]]; then
+    echo ""
+    echo "[$TOOL_LABEL] To resume this session with dual-graph:"
+    echo "[$TOOL_LABEL]   dgc --resume \"$_LAST_SESSION\""
+  fi
+fi
 
 # Ignore normal termination: 0=clean, 130=SIGINT (Ctrl+C), 143=SIGTERM
 if [[ "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" -ne 143 ]]; then

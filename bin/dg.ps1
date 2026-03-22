@@ -268,6 +268,29 @@ try {
                 # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
                 $venvPip = Join-Path $DG "venv\Scripts\pip.exe"
                 if (Test-Path $venvPip) { Invoke-NativeQuiet $venvPip @("install", "graperoot", "--upgrade", "--quiet") | Out-Null }
+                # Show changelog for new version (max 3 lines)
+                try {
+                    $changelog = ""
+                    try { $changelog = (Invoke-WebRequest -Uri "$BaseUrl/bin/changelog.txt" -TimeoutSec 5 -UseBasicParsing).Content } catch {
+                        try { $changelog = (Invoke-WebRequest -Uri "$R2/changelog.txt" -TimeoutSec 5 -UseBasicParsing).Content } catch {}
+                    }
+                    if ($changelog) {
+                        $notes = @(); $inVer = $false
+                        foreach ($line in $changelog -split "`n") {
+                            $line = $line.TrimEnd()
+                            if ($line -eq $remoteVer) { $inVer = $true; continue }
+                            if ($inVer) {
+                                if ($line -eq "" -and $notes.Count -gt 0) { break }
+                                if ($line.StartsWith("-")) { $notes += $line.Trim() }
+                                if ($notes.Count -eq 3) { break }
+                            }
+                        }
+                        if ($notes.Count -gt 0) {
+                            Write-Host "[$Tool] What's new in $remoteVer`:"
+                            foreach ($n in $notes) { Write-Host "[$Tool]   $n" }
+                        }
+                    }
+                } catch {}
                 Write-Host "[$Tool] Updated to $remoteVer. Restarting..."
                 $updatedScript = Join-Path $DG "dg.ps1"
                 if (Test-Path $updatedScript) { & $updatedScript $ProjectPath; exit $LASTEXITCODE }
