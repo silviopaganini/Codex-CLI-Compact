@@ -1,3 +1,6 @@
+3.9.8
+- Fixed: running dg and dgc together no longer kills each other's MCP server
+
 3.9.7
 - Fixed: settings.local.json now merges instead of overwriting (preserves user permissions/hooks)
 - Fixed: dgc --resume now works on Windows; resume hint shown at end of session
