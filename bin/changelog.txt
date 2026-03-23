@@ -1,3 +1,8 @@
+3.9.10
+- Removed: error telemetry — install and launcher errors are no longer reported to the server
+- Fixed: token counter always shows correct port 8899 (stale port file no longer read)
+- Fixed: old token-counter-mcp stopped gracefully (SIGTERM) instead of force-killed
+
 3.9.8
 - Fixed: running dg and dgc together no longer kills each other's MCP server
 

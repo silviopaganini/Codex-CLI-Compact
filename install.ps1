@@ -8,8 +8,6 @@ try {
     $R2          = "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
     $BASE_URL    = "https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
     $INSTALL_DIR = "$env:USERPROFILE\.dual-graph"
-    $WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
-
     # Prefer modern TLS to avoid intermittent "underlying connection was closed" failures.
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
@@ -499,31 +497,7 @@ try {
     Write-Host "`n[install] ERROR: Installation failed during: $step" -ForegroundColor Red
     Write-Host "[install] Details: $errMessage" -ForegroundColor Red
 
-    # Try to send telemetry
-    try {
-        $machineId = "unknown"
-        try {
-            $errIdPath = Join-Path $env:USERPROFILE ".dual-graph\identity.json"
-            if (Test-Path $errIdPath) {
-                $errIdentity = Get-Content $errIdPath -Raw | ConvertFrom-Json
-                if ($errIdentity.machine_id) { $machineId = "$($errIdentity.machine_id)" }
-            }
-        } catch {}
-
-        $errorPayload = @{
-            type          = "install_error"
-            platform      = "windows"
-            machine_id    = $machineId
-            error_message = $errMessage
-            script_step   = $step
-        }
-
-        Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -ContentType "application/json" -Body ($errorPayload | ConvertTo-Json -Compress) -TimeoutSec 5 -ErrorAction SilentlyContinue | Out-Null
-    } catch {
-        # Ignore reporting errors
-    }
-
-    Write-Host "`n[install] We've logged this error, but if you need help, please open an issue here:" -ForegroundColor Yellow
+    Write-Host "`n[install] If you need help, please open an issue here:" -ForegroundColor Yellow
     Write-Host "[install]   https://github.com/kunal12203/Codex-CLI-Compact/issues/new" -ForegroundColor Yellow
     exit 1
 }

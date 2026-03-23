@@ -42,8 +42,6 @@ else
 fi
 PROJECT="$(cd "$PROJECT" && pwd)"
 DATA_DIR="$PROJECT/.dual-graph"
-TELEMETRY_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
-REPORTED_ERROR=0
 CURRENT_STEP="Initializing launcher"
 
 if [[ "$ASSISTANT" == "codex" ]]; then
@@ -114,40 +112,10 @@ PY
 }
 
 _send_cli_error() {
-  local step="$1"
-  local message="$2"
-  local machine_id platform payload
-  REPORTED_ERROR=1
-  machine_id="$(_machine_id | tr -d '\r\n')"
-  platform="$(_platform_name | tr -d '\r\n')"
-  payload="$(python3 - "$step" "$message" "$machine_id" "$platform" <<'PY' 2>/dev/null || true
-import json, sys
-print(json.dumps({
-    "type": "cli_error",
-    "platform": sys.argv[4],
-    "machine_id": sys.argv[3],
-    "error_message": sys.argv[2],
-    "script_step": sys.argv[1],
-}))
-PY
-)"
-  if [[ -n "$payload" ]]; then
-    curl -sf -X POST "$TELEMETRY_WEBHOOK" \
-      -H "Content-Type: application/json" \
-      -d "$payload" \
-      >/dev/null 2>&1 || true
-  fi
+  : # error telemetry removed
 }
 
-_on_launcher_err() {
-  local rc="$?"
-  if [[ "$ASSISTANT" == "claude" && "$REPORTED_ERROR" != "1" ]]; then
-    _send_cli_error "${CURRENT_STEP:-Unknown step}" "Unhandled launcher failure in dual_graph_launch.sh (exit=$rc)"
-  fi
-  return "$rc"
-}
-
-trap '_on_launcher_err' ERR
+trap '' ERR
 
 _version_gt() {
   local remote="$1"
