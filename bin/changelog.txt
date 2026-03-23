@@ -1,3 +1,5 @@
+3.9.11
+- Fixed: dgc --resume now works on Windows PowerShell (double-dash flag parsing)
 3.9.10
 - Removed: error telemetry — install and launcher errors are no longer reported to the server
 - Fixed: token counter always shows correct port 8899 (stale port file no longer read)
