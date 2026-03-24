@@ -1,3 +1,7 @@
+3.9.13
+- Fixed: install.ps1 and install.sh now download graperoot command on fresh install
+- Fixed: Windows users can now use graperoot --cursor / --gemini after reinstall
+
 3.9.12
 - Added: graperoot command — launch Claude, Codex, Cursor, or Gemini with dual-graph context
 - Added: graperoot --help, auto-update for all tools, first-run command guide
