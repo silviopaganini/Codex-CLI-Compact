@@ -200,7 +200,7 @@ else
   # claude, cursor, gemini all share CLAUDE.md as their context policy file
   DOC_FILE="$PROJECT/CLAUDE.md"
   DOC_NAME="CLAUDE.md"
-  POLICY_MARKER="dgc-policy-v10"
+  POLICY_MARKER="dgc-policy-v11"
 fi
 
 # ── Self-update ────────────────────────────────────────────────────────────────
@@ -765,14 +765,14 @@ Live dashboard URL is printed at startup next to "Token usage".
 
 ## Context Store
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to \`.dual-graph/context-store.json\`.
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call \`graph_add_memory\`.
 
-**Entry format:**
-\`\`\`json
-{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
+**To add an entry:**
+\`\`\`
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
 \`\`\`
 
-**To append:** Read the file → add the new entry to the array → Write it back → call \`graph_register_edit\` on \`.dual-graph/context-store.json\`.
+**Do NOT write context-store.json directly** — always use \`graph_add_memory\`. It applies pruning and keeps the store healthy.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)
@@ -861,14 +861,14 @@ Live dashboard URL is printed at startup next to "Token usage".
 
 ## Context Store
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to \`.dual-graph/context-store.json\`.
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call \`graph_add_memory\`.
 
-**Entry format:**
-\`\`\`json
-{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
+**To add an entry:**
+\`\`\`
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
 \`\`\`
 
-**To append:** Read the file → add the new entry to the array → Write it back → call \`graph_register_edit\` on \`.dual-graph/context-store.json\`.
+**Do NOT write context-store.json directly** — always use \`graph_add_memory\`. It applies pruning and keeps the store healthy.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)
@@ -966,9 +966,42 @@ if [[ ! -f "$DOC_FILE" ]]; then
   _write_policy_doc
   echo "[$TOOL_LABEL] $DOC_NAME created."
 elif ! grep -q "$POLICY_MARKER" "$DOC_FILE"; then
-  echo "[$TOOL_LABEL] Appending dual-graph policy to existing $DOC_NAME (your content is preserved)..."
-  _append_policy_doc
-  echo "[$TOOL_LABEL] $DOC_NAME updated."
+  # Check if an older policy version is present — if so, surgically patch Context Store section
+  if grep -q "dgc-policy-v" "$DOC_FILE"; then
+    echo "[$TOOL_LABEL] Patching $DOC_NAME Context Store section (v10 -> v11)..."
+    python3 - "$DOC_FILE" << 'PYEOF' 2>/dev/null || true
+import sys, re, pathlib
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old_section = re.search(
+    r'(## Context Store\n\nWhenever you make a decision.*?Log immediately when the item arises[^\n]*\n)',
+    text, re.DOTALL)
+if old_section:
+    new_section = (
+        "## Context Store\n\n"
+        "Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.\n\n"
+        "**To add an entry:**\n"
+        "```\n"
+        'graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])\n'
+        "```\n\n"
+        "**Do NOT write context-store.json directly** \u2014 always use `graph_add_memory`. It applies pruning and keeps the store healthy.\n\n"
+        "**Rules:**\n"
+        "- Only log things worth remembering across sessions (not every minor detail)\n"
+        "- `content` must be under 15 words\n"
+        "- `files` lists the files this decision/task relates to (can be empty)\n"
+        "- Log immediately when the item arises \u2014 not at session end\n"
+    )
+    text = text[:old_section.start()] + new_section + text[old_section.end():]
+# Bump policy marker
+text = re.sub(r'dgc-policy-v\d+', 'dgc-policy-v11', text)
+path.write_text(text, encoding="utf-8")
+PYEOF
+    echo "[$TOOL_LABEL] $DOC_NAME updated."
+  else
+    echo "[$TOOL_LABEL] Appending dual-graph policy to existing $DOC_NAME (your content is preserved)..."
+    _append_policy_doc
+    echo "[$TOOL_LABEL] $DOC_NAME updated."
+  fi
 else
   echo "[$TOOL_LABEL] $DOC_NAME already up to date, skipping."
 fi

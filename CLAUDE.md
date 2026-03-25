@@ -67,14 +67,14 @@ When the user asks to release, bump version, or push changes, **read and follow 
 
 ## Context Store
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to `.dual-graph/context-store.json`.
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.
 
-**Entry format:**
-```json
-{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
+**To add an entry:**
+```
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
 ```
 
-**To append:** Read the file → add the new entry to the array → Write it back → call `graph_register_edit(files: [".dual-graph/context-store.json"])`.
+**Do NOT write context-store.json directly** — always use `graph_add_memory`. It applies pruning and keeps the store healthy.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)

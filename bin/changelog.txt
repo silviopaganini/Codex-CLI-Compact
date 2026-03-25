@@ -1,5 +1,8 @@
 3.9.17
 - Fixed: graperoot command not found on Mac/Linux after upgrading from pre-3.9.13 install
+- Fixed: context-store.json bloat — new graph_add_memory MCP tool with auto-prune; in-memory cache
+- Fixed: CLAUDE.md Context Store instruction now uses graph_add_memory (stops unbounded file growth)
+- Fixed: dgc upgrade surgically patches Context Store section only (v10→v11), preserves user edits
 
 3.9.16
 - Fixed: graperoot.ps1 double-BOM causing "assignment expression not valid" on Windows
