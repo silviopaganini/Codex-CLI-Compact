@@ -284,14 +284,17 @@ if ($Assistant -eq "cursor") {
     $CursorDir = Join-Path $ProjectPath ".cursor"
     New-Item -ItemType Directory -Force -Path $CursorDir | Out-Null
     $McpJson   = Join-Path $CursorDir "mcp.json"
-    $existing  = @{ mcpServers = @{} }
+    # Always use PSCustomObject so Add-Member works (Hashtable silently ignores it)
+    $mcpServers = [PSCustomObject]@{}
     if (Test-Path $McpJson) {
-        try { $existing = Get-Content $McpJson -Raw | ConvertFrom-Json } catch {}
+        try {
+            $parsed = Get-Content $McpJson -Raw | ConvertFrom-Json
+            if ($parsed.mcpServers) { $mcpServers = $parsed.mcpServers }
+        } catch {}
     }
-    if (-not $existing.mcpServers) { $existing | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue @{} -Force }
-    $existing.mcpServers | Add-Member -NotePropertyName "dual-graph" `
-        -NotePropertyValue @{ url = "http://localhost:$McpPort/mcp" } -Force
-    $existing | ConvertTo-Json -Depth 5 | Set-Content -Path $McpJson -Encoding UTF8
+    $mcpServers | Add-Member -NotePropertyName "dual-graph" `
+        -NotePropertyValue ([PSCustomObject]@{ url = "http://localhost:$McpPort/mcp" }) -Force
+    [PSCustomObject]@{ mcpServers = $mcpServers } | ConvertTo-Json -Depth 5 | Set-Content -Path $McpJson -Encoding UTF8
 
     Write-Host "[$Tool] MCP config written -> $McpJson"
     Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"

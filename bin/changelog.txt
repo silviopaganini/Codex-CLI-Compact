@@ -1,3 +1,6 @@
+3.9.21
+- Fixed: graperoot --cursor MCP config written empty on first run (Hashtable vs PSCustomObject bug)
+
 3.9.20
 - Fixed: graperoot scan always failed on Windows (graph_builder.exe passed to Python instead of run directly)
 - Fixed: graperoot MCP server healthcheck always timed out (HTTP / 404 -> use TCP connect instead)
