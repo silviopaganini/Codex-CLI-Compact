@@ -15,7 +15,7 @@ param(
     [string]$Resume = ""
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 # -- Help ----------------------------------------------------------------------
 if ($Arg0 -in @("--help","-h","?","/?")) {
@@ -163,8 +163,10 @@ function Wait-McpReady([int]$Port, [int]$TimeoutSec = 20) {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
     while ((Get-Date) -lt $deadline) {
         try {
-            $r = Invoke-WebRequest "http://localhost:$Port/" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
-            if ($r.StatusCode -lt 500) { return $true }
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $tcp.Connect("127.0.0.1", $Port)
+            $tcp.Close()
+            return $true
         } catch {}
         Start-Sleep -Milliseconds 500
     }
@@ -188,14 +190,26 @@ Write-Host "[$Tool] Data    : $DataDir"
 Write-Host ""
 
 # -- Build graph ----------------------------------------------------------------
-$GraphBuilder = Join-Path $DG "venv\Scripts\graph_builder.exe"
-if (-not (Test-Path $GraphBuilder)) {
-    $GraphBuilder = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Definition) "graph_builder.py"
+$GraphExe = Join-Path $DG "venv\Scripts\graph_builder.exe"
+$GraphPy  = $null
+if (-not (Test-Path $GraphExe)) {
+    # Find graph_builder.py from installed graperoot package
+    $pkgDir = & $Python -c "import graperoot, os; print(os.path.dirname(graperoot.__file__))" 2>$null
+    if ($pkgDir) {
+        $candidate = Join-Path $pkgDir "graph_builder.py"
+        if (Test-Path $candidate) { $GraphPy = $candidate }
+    }
 }
 Write-Host "[$Tool] Scanning project..."
 $InfoGraph = Join-Path $DataDir "info_graph.json"
 try {
-    & $Python $GraphBuilder --root $ProjectPath --out $InfoGraph 2>&1 | ForEach-Object { Write-Host $_ }
+    if (Test-Path $GraphExe) {
+        & $GraphExe --root $ProjectPath --out $InfoGraph 2>&1 | ForEach-Object { Write-Host $_ }
+    } elseif ($GraphPy) {
+        & $Python $GraphPy --root $ProjectPath --out $InfoGraph 2>&1 | ForEach-Object { Write-Host $_ }
+    } else {
+        Write-Host "[$Tool] WARNING: graph_builder not found - continuing without context graph."
+    }
 } catch {
     Write-Host "[$Tool] WARNING: graph scan failed - continuing without context graph."
 }
