@@ -1,3 +1,6 @@
+3.9.23
+- Fixed: mcp_graph_server.py never updated on auto-update (missing from update list)
+
 3.9.22
 - Fixed: graperoot restart after auto-update crashed (@(expr) passes array not splat in PowerShell)
 

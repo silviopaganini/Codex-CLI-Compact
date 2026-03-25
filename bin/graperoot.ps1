@@ -111,7 +111,8 @@ if ($_RemoteVer -and ($_LocalVer -eq "0" -or ([version]$_RemoteVer -gt [version]
         @{ Src = "$_BaseUrl/bin/graperoot.cmd"; Dst = (Join-Path $DG "graperoot.cmd") },
         @{ Src = "$_BaseUrl/bin/dgc.ps1";       Dst = (Join-Path $DG "dgc.ps1") },
         @{ Src = "$_BaseUrl/bin/dg.ps1";        Dst = (Join-Path $DG "dg.ps1") },
-        @{ Src = "$_BaseUrl/bin/dual_graph_launch.sh"; Dst = (Join-Path $DG "dual_graph_launch.sh") }
+        @{ Src = "$_BaseUrl/bin/dual_graph_launch.sh"; Dst = (Join-Path $DG "dual_graph_launch.sh") },
+        @{ Src = "$_R2/mcp_graph_server.py";    Dst = (Join-Path $DG "mcp_graph_server.py") }
     )
     foreach ($item in $_updateList) {
         try { Invoke-WebRequest $item.Src -OutFile $item.Dst -UseBasicParsing -TimeoutSec 15 | Out-Null } catch {}
