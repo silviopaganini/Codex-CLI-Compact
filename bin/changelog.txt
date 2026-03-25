@@ -1,3 +1,6 @@
+3.9.19
+- Fixed: graperoot --cursor/--gemini on Windows: mcp_graph_server.py not found in ~/.dual-graph
+
 3.9.18
 - Fixed: graperoot --cursor/--gemini crash on Windows (Start-Process same stdout/stderr file)
 - Fixed: graperoot unknown flag (e.g. --code) no longer treated as project path

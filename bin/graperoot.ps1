@@ -204,7 +204,19 @@ Write-Host ""
 
 # -- Start MCP server -----------------------------------------------------------
 $McpPort    = Get-FreePort
-$McpServer  = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Definition) "mcp_graph_server.py"
+$McpServer  = Join-Path $DG "mcp_graph_server.py"
+if (-not (Test-Path $McpServer)) {
+    # Try installed graperoot package location
+    $pkgDir = & $Python -c "import graperoot, os; print(os.path.dirname(graperoot.__file__))" 2>$null
+    if ($pkgDir) {
+        $candidate = Join-Path $pkgDir "mcp_graph_server.py"
+        if (Test-Path $candidate) { $McpServer = $candidate }
+    }
+}
+if (-not (Test-Path $McpServer)) {
+    Write-Host "[$Tool] Downloading mcp_graph_server.py..."
+    try { Invoke-WebRequest "$_R2/mcp_graph_server.py" -OutFile $McpServer -UseBasicParsing -TimeoutSec 30 | Out-Null } catch {}
+}
 $McpPortFile = Join-Path $DataDir "mcp_port"
 $McpLog     = Join-Path $DataDir "mcp_server.log"
 $McpPidFile = Join-Path $DataDir "mcp_server.pid"
