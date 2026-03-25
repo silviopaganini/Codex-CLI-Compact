@@ -10,9 +10,11 @@ set "LOCAL_CMD=%DG%\dg.cmd"
 set "PENDING_CMD=%DG%\dg.cmd.new"
 set "BOOTSTRAP_PS1=%TEMP%\dual_graph_dg_bootstrap.ps1"
 set "REMOTE_PS1=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/bin/dg.ps1"
-set "LOCAL_VER=%DG%\version.txt"
-set "REMOTE_VER=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/bin/version.txt"
-set "REMOTE_VER_FALLBACK=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev/version.txt"
+set "REMOTE_PS1_R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev/dg.ps1"
+set "REMOTE_GR_CMD=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/bin/graperoot.cmd"
+set "REMOTE_GR_PS1=https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/bin/graperoot.ps1"
+set "REMOTE_GR_CMD_R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev/graperoot.cmd"
+set "REMOTE_GR_PS1_R2=https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev/graperoot.ps1"
 set "INSTALL_METHOD=direct"
 set "REPAIR_CMD=irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 ^| iex"
 
@@ -35,7 +37,13 @@ if defined SCOOP (
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { Invoke-WebRequest '%REMOTE_PS1%' -OutFile '%LOCAL_PS1%' -UseBasicParsing -TimeoutSec 10 | Out-Null } catch {}; try { Invoke-WebRequest '%REMOTE_PS1%' -OutFile '%BOOTSTRAP_PS1%' -UseBasicParsing -TimeoutSec 10 | Out-Null } catch {}; try { Invoke-WebRequest '%REMOTE_VER%' -OutFile '%LOCAL_VER%' -UseBasicParsing -TimeoutSec 5 | Out-Null } catch { try { Invoke-WebRequest '%REMOTE_VER_FALLBACK%' -OutFile '%LOCAL_VER%' -UseBasicParsing -TimeoutSec 5 | Out-Null } catch {} }" >nul 2>&1
+  "$gh='%REMOTE_PS1%';$r2='%REMOTE_PS1_R2%';$loc='%LOCAL_PS1%';$bs='%BOOTSTRAP_PS1%';" ^
+  "function dl($u,$o){try{Invoke-WebRequest $u -OutFile $o -UseBasicParsing -TimeoutSec 10|Out-Null;return $true}catch{return $false}};" ^
+  "if(-not(dl $gh $loc)){dl $r2 $loc|Out-Null};" ^
+  "if(-not(dl $gh $bs)){dl $r2 $bs|Out-Null};" ^
+  "dl '%REMOTE_GR_CMD%' '%DG%\graperoot.cmd'|Out-Null;if(-not(Test-Path '%DG%\graperoot.cmd')){dl '%REMOTE_GR_CMD_R2%' '%DG%\graperoot.cmd'|Out-Null};" ^
+  "dl '%REMOTE_GR_PS1%' '%DG%\graperoot.ps1'|Out-Null;if(-not(Test-Path '%DG%\graperoot.ps1')){dl '%REMOTE_GR_PS1_R2%' '%DG%\graperoot.ps1'|Out-Null}" ^
+  >nul 2>&1
 
 if exist "%BOOTSTRAP_PS1%" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOTSTRAP_PS1%" %*

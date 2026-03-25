@@ -1614,8 +1614,10 @@ if [[ "$ASSISTANT" == "cursor" ]]; then
   echo "[$TOOL_LABEL] Opening project in Cursor..."
   "$CURSOR_BIN" "$PROJECT" 2>"$DATA_DIR/assistant_stderr.log" &
   echo "[$TOOL_LABEL] Press Ctrl+C to stop the MCP server when you are done."
-  # Wait forever — Ctrl+C (SIGINT) will kill us and the MCP server child.
-  while true; do sleep 30; done
+  # Reset trap to exit cleanly on first Ctrl+C (INT trap must call exit, otherwise
+  # the while loop re-enters and the trap fires on every keypress).
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"; exit 0' INT TERM HUP
+  while true; do sleep 5 & wait $!; done
 elif [[ -n "$RESUME_ID" ]]; then
   "$ASSISTANT" --resume "$RESUME_ID" 2>"$DATA_DIR/assistant_stderr.log"
 elif [[ -n "$PROMPT" ]]; then

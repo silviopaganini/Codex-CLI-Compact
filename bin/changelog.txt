@@ -1,3 +1,8 @@
+3.9.14
+- Fixed: graperoot --cursor Ctrl+C now exits cleanly on first press (macOS/Linux)
+- Fixed: dgc.cmd/dg.cmd now always bootstrap graperoot.cmd+ps1 with R2 fallback
+- Fixed: removed version.txt pre-download from .cmd so PS1 update block fires correctly
+
 3.9.13
 - Fixed: install.ps1 and install.sh now download graperoot command on fresh install
 - Fixed: Windows users can now use graperoot --cursor / --gemini after reinstall
