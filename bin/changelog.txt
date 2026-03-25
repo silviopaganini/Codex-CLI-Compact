@@ -1,3 +1,6 @@
+3.9.15
+- Fixed: graperoot.ps1 parse error on Windows (UTF-8 BOM + CRLF + remove em-dash)
+
 3.9.14
 - Fixed: graperoot --cursor Ctrl+C now exits cleanly on first press (macOS/Linux)
 - Fixed: dgc.cmd/dg.cmd now always bootstrap graperoot.cmd+ps1 with R2 fallback

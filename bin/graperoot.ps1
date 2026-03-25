@@ -1,4 +1,4 @@
-# graperoot.ps1 — Windows launcher for Dual-Graph with AI tool selection
+﻿﻿# graperoot.ps1 - Windows launcher for Dual-Graph with AI tool selection
 # Handles --cursor and --gemini directly.
 # For --claude and --codex, delegates to dgc.ps1 / dg.ps1.
 #
@@ -17,10 +17,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Help ──────────────────────────────────────────────────────────────────────
+# -- Help ----------------------------------------------------------------------
 if ($Arg0 -in @("--help","-h","?","/?")) {
     Write-Host ""
-    Write-Host "  graperoot — Dual-Graph AI tool launcher"
+    Write-Host "  graperoot - Dual-Graph AI tool launcher"
     Write-Host ""
     Write-Host "  Usage:"
     Write-Host "    graperoot [path] <tool> [options]"
@@ -51,7 +51,7 @@ $BaseUrl     = "https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/m
 $WebhookUrl  = "https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
 $Tool        = "graperoot"
 
-# ── Parse args: find assistant flag, project path, passthrough ────────────────
+# -- Parse args: find assistant flag, project path, passthrough ----------------
 $Assistant   = "claude"   # default
 $ProjectPath = ""
 $Passthrough = @()
@@ -69,7 +69,7 @@ foreach ($arg in @($Arg0, $Arg1, $Arg2)) {
 if (-not $ProjectPath) { $ProjectPath = (Get-Location).Path }
 $ProjectPath = (Resolve-Path $ProjectPath).Path
 
-# ── For claude / codex: delegate to existing proven launchers ─────────────────
+# -- For claude / codex: delegate to existing proven launchers -----------------
 if ($Assistant -in @("claude","codex")) {
     $Ps1Name  = if ($Assistant -eq "claude") { "dgc.ps1" } else { "dg.ps1" }
     $LocalPs1 = Join-Path $DG $Ps1Name
@@ -94,7 +94,7 @@ if ($Assistant -in @("claude","codex")) {
     exit $LASTEXITCODE
 }
 
-# ── Self-update (cursor / gemini path only — claude/codex update via their ps1) ─
+# -- Self-update (cursor / gemini path only - claude/codex update via their ps1) -
 $_BaseUrl  = "https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 $_R2       = "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 $_VerFile  = Join-Path $DG "version.txt"
@@ -121,7 +121,7 @@ if ($_RemoteVer -and ($_LocalVer -eq "0" -or ([version]$_RemoteVer -gt [version]
     if (Test-Path $_newScript) { & $_newScript @($Arg0, $Arg1, $Arg2); exit $LASTEXITCODE }
 }
 
-# ── cursor / gemini: need the full pipeline — load shared helpers from dgc.ps1 ─
+# -- cursor / gemini: need the full pipeline - load shared helpers from dgc.ps1 -
 # Pull dgc.ps1 functions by dot-sourcing (it is designed to be safe to source)
 $DgcPs1 = Join-Path $DG "dgc.ps1"
 if (-not (Test-Path $DgcPs1)) {
@@ -139,7 +139,7 @@ if (-not (Test-Path $DgcPs1)) {
     }
 }
 
-# ── Shared helpers ─────────────────────────────────────────────────────────────
+# -- Shared helpers -------------------------------------------------------------
 function Send-CliError([string]$Step, [string]$Message) {
     try {
         $payload = @{ type="cli_error"; platform="windows"; error_message=$Message; script_step=$Step }
@@ -170,7 +170,7 @@ function Wait-McpReady([int]$Port, [int]$TimeoutSec = 20) {
     return $false
 }
 
-# ── Locate Python venv (shared with dgc/dg) ───────────────────────────────────
+# -- Locate Python venv (shared with dgc/dg) -----------------------------------
 $Python = Join-Path $DG "venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) {
     Write-Host "[$Tool] ERROR: venv not found at $DG\venv"
@@ -186,7 +186,7 @@ Write-Host "[$Tool] Project : $ProjectPath"
 Write-Host "[$Tool] Data    : $DataDir"
 Write-Host ""
 
-# ── Build graph ────────────────────────────────────────────────────────────────
+# -- Build graph ----------------------------------------------------------------
 $GraphBuilder = Join-Path $DG "venv\Scripts\graph_builder.exe"
 if (-not (Test-Path $GraphBuilder)) {
     $GraphBuilder = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Definition) "graph_builder.py"
@@ -196,12 +196,12 @@ $InfoGraph = Join-Path $DataDir "info_graph.json"
 try {
     & $Python $GraphBuilder --root $ProjectPath --out $InfoGraph 2>&1 | ForEach-Object { Write-Host $_ }
 } catch {
-    Write-Host "[$Tool] WARNING: graph scan failed — continuing without context graph."
+    Write-Host "[$Tool] WARNING: graph scan failed - continuing without context graph."
 }
 Write-Host "[$Tool] Scan complete."
 Write-Host ""
 
-# ── Start MCP server ───────────────────────────────────────────────────────────
+# -- Start MCP server -----------------------------------------------------------
 $McpPort    = Get-FreePort
 $McpServer  = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Definition) "mcp_graph_server.py"
 $McpPortFile = Join-Path $DataDir "mcp_port"
@@ -228,7 +228,7 @@ if (-not (Wait-McpReady -Port $McpPort -TimeoutSec 20)) {
 Write-Host "[$Tool] MCP server ready on port $McpPort (PID $($mcpProc.Id))."
 Write-Host ""
 
-# ── Cursor: write project MCP config and open IDE ─────────────────────────────
+# -- Cursor: write project MCP config and open IDE -----------------------------
 if ($Assistant -eq "cursor") {
     # Find cursor.exe
     $CursorBin = $null
@@ -285,11 +285,11 @@ if ($Assistant -eq "cursor") {
     try { $mcpProc.WaitForExit() } catch { Start-Sleep -Seconds 86400 }
 }
 
-# ── Gemini: write ~/.gemini/settings.json and launch ─────────────────────────
+# -- Gemini: write ~/.gemini/settings.json and launch -------------------------
 if ($Assistant -eq "gemini") {
     # Auto-install gemini CLI if missing
     if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) {
-        Write-Host "[$Tool] gemini CLI not found — installing..."
+        Write-Host "[$Tool] gemini CLI not found - installing..."
         try {
             npm install -g "@google/gemini-cli" 2>&1 | Out-Null
         } catch {}
