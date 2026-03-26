@@ -6,7 +6,7 @@ Works on **macOS, Linux, and Windows**. Supports any project size.
 
 Supports **TypeScript, JavaScript, Python, Go, Swift, Rust, Java, Kotlin, C#, Ruby, and PHP**.
 
-**Join the community: [discord.gg/xe7Hr5Dx](https://discord.com/invite/xe7Hr5Dx)**
+**Join the community: [discord.gg/ptyr7KJz](https://discord.gg/ptyr7KJz)**
 
 ---
 
@@ -165,7 +165,7 @@ get_session_stats()                  # running session cost
 
 The launcher checks for updates on every run and auto-updates if a new version is available. No manual intervention needed.
 
-Current version: **3.9.25**
+Current version: **3.9.26**
 
 ---
 
@@ -214,7 +214,7 @@ Remove-Item "$env:USERPROFILE\.claude\token-counter-stop.ps1" -Force -ErrorActio
 
 Have a question, found a bug, or want to share feedback?
 
-**Join the Discord: [discord.gg/xe7Hr5Dx](https://discord.com/invite/xe7Hr5Dx)**
+**Join the Discord: [discord.gg/ptyr7KJz](https://discord.gg/ptyr7KJz)**
 
 - Get help with setup
 - Report bugs
