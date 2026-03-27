@@ -36,6 +36,8 @@ _show_help() {
     --codex     OpenAI Codex  (shorthand: dg  [path])
     --cursor    Cursor IDE
     --gemini    Google Gemini CLI
+    --opencode  OpenCode
+    --copilot   GitHub Copilot (VS Code)
 
   Options:
     --resume <id>    Resume a previous claude / codex session
@@ -45,6 +47,8 @@ _show_help() {
     graperoot . --claude
     graperoot /my/project --cursor
     graperoot /my/project --gemini
+    graperoot /my/project --opencode
+    graperoot /my/project --copilot
     graperoot /my/project --claude --resume <session-id>
     dgc .                          # same as graperoot . --claude
     dg  .                          # same as graperoot . --codex
@@ -63,10 +67,12 @@ PASSTHROUGH=()
 
 for arg in "$@"; do
   case "$arg" in
-    --claude|claude)   ASSISTANT="claude" ;;
-    --codex|codex)     ASSISTANT="codex"  ;;
-    --cursor|cursor)   ASSISTANT="cursor" ;;
-    --gemini|gemini)   ASSISTANT="gemini" ;;
+    --claude|claude)     ASSISTANT="claude"   ;;
+    --codex|codex)       ASSISTANT="codex"    ;;
+    --cursor|cursor)     ASSISTANT="cursor"   ;;
+    --gemini|gemini)     ASSISTANT="gemini"   ;;
+    --opencode|opencode) ASSISTANT="opencode" ;;
+    --copilot|copilot)   ASSISTANT="copilot"  ;;
     *)
       # First non-flag positional arg is the project path
       if [[ -z "$PROJECT" && "$arg" != --* ]]; then

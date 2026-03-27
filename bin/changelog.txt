@@ -1,3 +1,6 @@
+3.9.30
+- Fixed: bash graperoot launcher missing --opencode and --copilot flags (macOS/Linux)
+
 3.9.29
 - Added: graperoot --opencode support (writes project opencode.json, launches opencode TUI)
 - Added: graperoot --copilot support (writes .vscode/mcp.json, opens VS Code)
