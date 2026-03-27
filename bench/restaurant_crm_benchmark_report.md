@@ -2,7 +2,7 @@
 
 Date: March 11, 2026
 
-Status: Partial. The full 20-prompt rerun could not be completed on March 11, 2026 because `codex exec` hit a usage-limit error on the first graph-enabled prompt. Raw failure output is saved in [restaurant_crm_benchmark_raw.jsonl](/Users/krishnakant/Documents/Open%20source/beads-main/dual-graph-dashboard/bench/restaurant_crm_benchmark_raw.jsonl).
+Status: Partial. The full 20-prompt rerun could not be completed on March 11, 2026 because `codex exec` hit a usage-limit error on the first graph-enabled prompt. Raw failure output is saved in `bench/restaurant_crm_benchmark_raw.jsonl`.
 
 ## Confirmed Prior Result
 
@@ -73,7 +73,7 @@ Only one prompt has confirmed answer data, so this section is necessarily limite
 - Sandbox limitation: the local MCP server could not bind to `0.0.0.0:8080` inside the sandbox, so the benchmark had to be rerun with escalation.
 - CLI compatibility note: `codex mcp add --transport http ...` is not accepted by installed `codex-cli 0.105.0`; the harness fallback `codex mcp add dual-graph --url ...` worked.
 - Hard blocker: on March 11, 2026, direct reproduction of prompt 1 failed with a Codex usage-limit error indicating retry availability on March 18, 2026 at 1:54 PM.
-- Additional environment warnings: Codex also emitted state database migration warnings for `/Users/krishnakant/.codex/state_5.sqlite`, but the explicit usage-limit error was the decisive blocker.
+- Additional environment warnings: Codex also emitted state database migration warnings for `~/.codex/state_5.sqlite`, but the explicit usage-limit error was the decisive blocker.
 - Suspicious prompts: none identified from prompt content. The failure was environmental, not prompt-specific.
 
 ## Final Verdict

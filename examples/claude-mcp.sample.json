@@ -3,11 +3,11 @@
     "dual-graph": {
       "command": "python3",
       "args": [
-        "/Users/krishnakant/Documents/Open source/beads-main/dual-graph-dashboard/mcp_graph_server.py"
+        "/path/to/dual-graph-dashboard/mcp_graph_server.py"
       ],
       "env": {
         "DG_BASE_URL": "http://127.0.0.1:8787",
-        "DUAL_GRAPH_PROJECT_ROOT": "/Users/krishnakant/documents/personal projects/restaurant CRM/restaurant-crm"
+        "DUAL_GRAPH_PROJECT_ROOT": "/path/to/your/project"
       }
     }
   }

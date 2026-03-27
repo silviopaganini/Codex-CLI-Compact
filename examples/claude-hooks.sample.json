@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /Users/krishnakant/Documents/Open source/beads-main/dual-graph-dashboard/dg.py scan && python3 /Users/krishnakant/Documents/Open source/beads-main/dual-graph-dashboard/dg.py prime"
+            "command": "python3 /path/to/dual-graph-dashboard/dg.py scan && python3 /path/to/dual-graph-dashboard/dg.py prime"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /Users/krishnakant/Documents/Open source/beads-main/dual-graph-dashboard/dg.py prime"
+            "command": "python3 /path/to/dual-graph-dashboard/dg.py prime"
           }
         ]
       }

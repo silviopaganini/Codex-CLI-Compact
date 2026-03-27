@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# graperoot — Dual-Graph launcher with AI tool selection
+#
+# Usage:
+#   graperoot [path] --claude    # Claude Code  (same as dgc)
+#   graperoot [path] --codex     # OpenAI Codex (same as dg)
+#   graperoot [path] --cursor    # Cursor IDE
+#   graperoot [path] --gemini    # Google Gemini CLI
+#
+# The tool flag can come before or after the path.
+# Flags can be written with or without --  (e.g. cursor or --cursor).
+# Default tool: --claude.  Default path: current directory.
+#
+# Examples:
+#   graperoot /path/to/project --claude
+#   graperoot /path/to/project --cursor
+#   graperoot /path/to/project gemini
+#   graperoot . --codex
+#   graperoot /path/to/project --claude --resume <session-id>
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Help ──────────────────────────────────────────────────────────────────────
+_show_help() {
+  cat <<'HELP'
+
+  graperoot — Dual-Graph AI tool launcher
+
+  Usage:
+    graperoot [path] <tool> [options]
+
+  Tools:
+    --claude    Claude Code   (shorthand: dgc [path])
+    --codex     OpenAI Codex  (shorthand: dg  [path])
+    --cursor    Cursor IDE
+    --gemini    Google Gemini CLI
+    --opencode  OpenCode
+    --copilot   GitHub Copilot (VS Code)
+
+  Options:
+    --resume <id>    Resume a previous claude / codex session
+    --help, -h, ?    Show this help
+
+  Examples:
+    graperoot . --claude
+    graperoot /my/project --cursor
+    graperoot /my/project --gemini
+    graperoot /my/project --opencode
+    graperoot /my/project --copilot
+    graperoot /my/project --claude --resume <session-id>
+    dgc .                          # same as graperoot . --claude
+    dg  .                          # same as graperoot . --codex
+
+HELP
+  exit 0
+}
+
+for _a in "$@"; do
+  case "$_a" in --help|-h|\?) _show_help ;; esac
+done
+
+ASSISTANT="claude"   # default
+PROJECT=""
+PASSTHROUGH=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --claude|claude)     ASSISTANT="claude"   ;;
+    --codex|codex)       ASSISTANT="codex"    ;;
+    --cursor|cursor)     ASSISTANT="cursor"   ;;
+    --gemini|gemini)     ASSISTANT="gemini"   ;;
+    --opencode|opencode) ASSISTANT="opencode" ;;
+    --copilot|copilot)   ASSISTANT="copilot"  ;;
+    *)
+      # First non-flag positional arg is the project path
+      if [[ -z "$PROJECT" && "$arg" != --* ]]; then
+        PROJECT="$arg"
+      else
+        PASSTHROUGH+=("$arg")
+      fi
+      ;;
+  esac
+done
+
+[[ -z "$PROJECT" ]] && PROJECT="$(pwd)"
+
+exec "$SCRIPT_DIR/dual_graph_launch.sh" "$ASSISTANT" "$PROJECT" \
+  "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}"

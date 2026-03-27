@@ -13,9 +13,7 @@ This folder contains the saved setup for comparing:
 
 ## Project Used
 
-Source project:
-
-`/Users/krishnakant/documents/Personal Projects/Restaurant crm/restaurant-crm`
+Source project: a full-stack restaurant CRM app (not included in this repo).
 
 Benchmark copies:
 
@@ -26,11 +24,11 @@ If those `/tmp` copies are missing, recreate them with:
 
 ```bash
 rsync -a --delete --exclude '.git' --exclude 'node_modules' --exclude '.next' --exclude '.dual-graph' \
-  '/Users/krishnakant/documents/Personal Projects/Restaurant crm/restaurant-crm/' \
+  '/path/to/your/restaurant-crm/' \
   '/tmp/restaurant-crm-with-graph/'
 
 rsync -a --delete --exclude '.git' --exclude 'node_modules' --exclude '.next' --exclude '.dual-graph' \
-  '/Users/krishnakant/documents/Personal Projects/Restaurant crm/restaurant-crm/' \
+  '/path/to/your/restaurant-crm/' \
   '/tmp/restaurant-crm-baseline/'
 ```
 

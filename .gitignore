@@ -30,9 +30,13 @@ license/
 # Secrets — never commit
 .env
 .env.*
+RELEASING.md
 
 # macOS
 .DS_Store
+
+# Claude local settings (machine-specific, auto-generated)
+.claude/settings.local.json
 
 # Local project graphs (per-project, stays on machine)
 .dual-graph/

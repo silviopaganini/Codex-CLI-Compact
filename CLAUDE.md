@@ -52,18 +52,29 @@ Live dashboard URL is printed at startup next to "Token usage".
 - `max_supplementary_greps` and `max_supplementary_files` are hard caps - never exceed them.
 - Do NOT dump full chat history.
 - Do NOT call `graph_retrieve` more than once per turn.
-- After edits, call `graph_register_edit` with the changed files. Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
+- After edits, call `graph_register_edit(files: ["path/to/file"])` — the parameter is **`files` (plural, always an array)**. Never pass `file` (singular). Use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`) when the edit targets a specific function, class, or hook.
+
+## Releasing
+
+When the user asks to release, bump version, or push changes, **read and follow `RELEASING.md`** in the project root. It contains:
+
+- All version file locations across 3 repos (Dashboard, Core, Scoop)
+- Correct push order (Dashboard first, then Core + Scoop)
+- Scoop hash computation steps
+- Common mistakes to avoid
+
+**Never skip any version file.** Always check all three repos for the current highest version before bumping.
 
 ## Context Store
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to `.dual-graph/context-store.json`.
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.
 
-**Entry format:**
-```json
-{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
+**To add an entry:**
+```
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
 ```
 
-**To append:** Read the file → add the new entry to the array → Write it back → call `graph_register_edit` on `.dual-graph/context-store.json`.
+**Do NOT write context-store.json directly** — always use `graph_add_memory`. It applies pruning and keeps the store healthy.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)

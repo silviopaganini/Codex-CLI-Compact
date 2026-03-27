@@ -4,12 +4,10 @@ try {
     #   irm https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main/install.ps1 | iex
 
     $ErrorActionPreference = "Stop"
-    $LICENSE_SERVER = "https://dual-graph-license-production.up.railway.app"
+
     $R2          = "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
     $BASE_URL    = "https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
     $INSTALL_DIR = "$env:USERPROFILE\.dual-graph"
-    $WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
-
     # Prefer modern TLS to avoid intermittent "underlying connection was closed" failures.
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
@@ -94,9 +92,70 @@ try {
         $venvPython = Join-Path $venvDir "Scripts\python.exe"
         $venvCfg = Join-Path $venvDir "pyvenv.cfg"
 
-        # Only probe the existing venv if it looks structurally complete.
-        # Checking pyvenv.cfg FIRST avoids running a broken python.exe
-        # (which would lock files and prevent cleanup on Windows).
+        # Step 1: Kill all processes holding venv files open.
+        # First try targeted kill via WMI CommandLine — works for normal processes.
+        # WMI CommandLine is empty for protected/system processes (e.g. Claude Code's MCP
+        # server), so the targeted kill is silently a no-op in that case.
+        try {
+            Get-Process | Where-Object {
+                try { $_.Path -and $_.Path.StartsWith($InstallDir) } catch { $false }
+            } | ForEach-Object {
+                try { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue } catch {}
+            }
+            Get-WmiObject Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue |
+                Where-Object { $_.CommandLine -and $_.CommandLine -like "*$InstallDir*" } |
+                ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
+            Start-Sleep -Milliseconds 500
+        } catch {}
+        # Also use taskkill — it works across terminal sessions where Stop-Process gets Access Denied
+        try { & taskkill /F /IM "mcp-graph-server.exe" /T 2>$null } catch {}
+        try { & taskkill /F /IM "graph-builder.exe" /T 2>$null } catch {}
+
+        # Fallback: if a venv .pyd is still locked after targeted kills, the locking process
+        # returned empty WMI CommandLine (protected process, e.g. Claude Code MCP server).
+        # Probe the file directly — if locked, kill ALL python.exe as a last resort.
+        $probePyd = Get-ChildItem (Join-Path $venvDir "Lib\site-packages\graperoot") -Filter "*.pyd" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($probePyd) {
+            $locked = $false
+            try {
+                $stream = [System.IO.File]::Open($probePyd.FullName, 'Open', 'ReadWrite', 'None')
+                $stream.Close()
+            } catch [System.IO.IOException] {
+                $locked = $true
+            } catch {}
+            if ($locked) {
+                Write-Host "[install] Venv DLL is still locked — stopping all Python processes..."
+                try { & taskkill /F /IM "python.exe" /T 2>$null } catch {}
+                try { & taskkill /F /IM "pythonw.exe" /T 2>$null } catch {}
+                Start-Sleep -Milliseconds 1000
+            }
+        }
+
+        # Step 2: Neutralise any orphaned pywin32 left by a previous installer version.
+        # pip uninstall exits 0 but leaves pywin32.pth behind when the DLL is locked.
+        # The leftover .pth makes every Python startup print a ModuleNotFoundError to
+        # stderr, which becomes a terminating exception under EAP=Stop.
+        # Fix: delete the .pth; if Windows ACLs block deletion, overwrite with empty
+        # content — write permission is granted even when delete isn't.
+        $sitePkgs = Join-Path $venvDir "Lib\site-packages"
+        $pywin32Pth = Join-Path $sitePkgs "pywin32.pth"
+        if (Test-Path $pywin32Pth) {
+            Write-Host "[install] Neutralising orphaned pywin32 (left by previous install)..."
+            # 1. Try deletion first
+            try { Remove-Item $pywin32Pth -Force -ErrorAction Stop } catch {
+                # Deletion failed — overwrite with empty content so site.py ignores it
+                try { [System.IO.File]::WriteAllText($pywin32Pth, "") } catch {}
+            }
+            # 2. Best-effort cleanup of DLL folder (may be locked — non-fatal)
+            $pw32sys = Join-Path $sitePkgs "pywin32_system32"
+            if (Test-Path $pw32sys) {
+                try { Remove-Item $pw32sys -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+            }
+            # 3. pip uninstall for registry cleanup — don't depend on exit code
+            Invoke-Native { & $venvPython -m pip uninstall pywin32 pywin32-ctypes -y } | Out-Null
+        }
+
+        # Step 3: Probe the existing venv — reuse only if structurally complete and pip works.
         if ((Test-Path $venvPython) -and (Test-Path $venvCfg)) {
             Invoke-Native { & $venvPython -m pip --version } | Out-Null
             if ($LASTEXITCODE -eq 0) {
@@ -104,13 +163,8 @@ try {
                 return
             }
 
-            Write-Host "[install] Existing venv is missing pip. Trying to repair it..."
-            Invoke-Native { & $venvPython -m ensurepip --upgrade } | Out-Null
-            Invoke-Native { & $venvPython -m pip --version } | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "[install] Repaired existing Python venv."
-                return
-            }
+            # pip is missing — venv is in bad shape; fall through to recreate it fresh
+            Write-Host "[install] Existing venv is missing pip — recreating it..."
         }
 
         # Remove any existing (broken or partial) venv before creating fresh.
@@ -318,46 +372,27 @@ try {
     $step = "Initializing install directory"
     New-Item -ItemType Directory -Force -Path $INSTALL_DIR | Out-Null
 
-    # ── License check + install telemetry (same as install.sh flow) ───────────────
-    $step = "Checking license"
-    Write-Host "[install] Checking license..."
-    $licenseKey = "$env:DG_LICENSE_KEY"
-    $machineId = (Get-CimInstance -ClassName Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID
-    if ([string]::IsNullOrWhiteSpace($machineId)) { $machineId = "$env:COMPUTERNAME" }
-    $payload = @{
-        key        = $licenseKey
-        machine_id = $machineId
-        platform   = "windows"
-        tool       = "install-ps1"
-    }
-    $licenseOk = $false
+    # ── Identity setup ────────────────────────────────────────────────────────────
+    $step = "Writing identity"
+    $machineId = $null
     try {
-        $validateResp = Invoke-RestMethod `
-          -Uri "$LICENSE_SERVER/validate" `
-          -Method Post `
-          -ContentType "application/json" `
-          -Body ($payload | ConvertTo-Json -Compress) `
-          -TimeoutSec 10
-        if ($validateResp.ok) {
-            $licenseOk = $true
-            Write-Host "[install] License validated." -ForegroundColor Green
-        } else {
-            $err = "$($validateResp.error)"
-            if ([string]::IsNullOrWhiteSpace($err)) { $err = "unknown" }
-            Write-Host "[install] License check returned: $err" -ForegroundColor Yellow
-            Write-Host "[install] Continuing installation..." -ForegroundColor Yellow
+        $existingIdPath = Join-Path $env:USERPROFILE ".dual-graph\identity.json"
+        if (Test-Path $existingIdPath) {
+            $existingIdentity = Get-Content $existingIdPath -Raw | ConvertFrom-Json
+            if ($existingIdentity.machine_id -and $existingIdentity.installed_date) {
+                $machineId = "$($existingIdentity.machine_id)"
+            }
         }
-    } catch {
-        Write-Host "[install] License server unreachable — skipping check." -ForegroundColor Yellow
-        Write-Host "[install] Continuing installation..." -ForegroundColor Yellow
-    }
+    } catch {}
+    if (-not $machineId) { $machineId = [System.Guid]::NewGuid().ToString("N") }
 
     # Save identity so MCP server can ping on each startup (tracks real usage)
     try {
         $identity = @{
-            machine_id = $machineId
-            platform   = "windows"
-            tool       = "install-ps1"
+            machine_id     = $machineId
+            platform       = "windows"
+            installed_date = (Get-Date -Format "yyyy-MM-dd")
+            tool           = "install-ps1"
         }
         $identity | ConvertTo-Json -Compress | Set-Content -Path "$INSTALL_DIR\identity.json" -Encoding UTF8
     } catch { }  # never block install
@@ -365,14 +400,26 @@ try {
     # ── Download core engine ──────────────────────────────────────────────────────
     $step = "Downloading core engine"
     Write-Host "[install] Downloading core engine..."
-    Invoke-WebRequestWithRetry -Uri "$R2/dual_graph_launch.sh" -OutFile "$INSTALL_DIR\dual_graph_launch.sh" -Label "Download dual_graph_launch.sh"
+    $launchDest = "$INSTALL_DIR\dual_graph_launch.sh"
+    if (Test-Path $launchDest) {
+        Write-Host "[install] Core engine already present, skipping download."
+    } else {
+        try {
+            Invoke-WebRequestWithRetry -Uri "$R2/dual_graph_launch.sh" -OutFile $launchDest -Label "Download dual_graph_launch.sh"
+        } catch {
+            Write-Host "[install] R2 unreachable, falling back to GitHub..."
+            Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dual_graph_launch.sh" -OutFile $launchDest -Label "Download dual_graph_launch.sh (GitHub fallback)"
+        }
+    }
 
     $step = "Downloading CLI wrappers"
     Write-Host "[install] Downloading CLI wrappers..."
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.cmd" -OutFile "$INSTALL_DIR\dgc.cmd" -Label "Download dgc.cmd"
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.cmd"  -OutFile "$INSTALL_DIR\dg.cmd"  -Label "Download dg.cmd"
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.ps1" -OutFile "$INSTALL_DIR\dgc.ps1" -Label "Download dgc.ps1"
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.ps1"  -OutFile "$INSTALL_DIR\dg.ps1"  -Label "Download dg.ps1"
+    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.cmd"       -OutFile "$INSTALL_DIR\dgc.cmd"       -Label "Download dgc.cmd"
+    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.cmd"        -OutFile "$INSTALL_DIR\dg.cmd"        -Label "Download dg.cmd"
+    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.ps1"       -OutFile "$INSTALL_DIR\dgc.ps1"       -Label "Download dgc.ps1"
+    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.ps1"        -OutFile "$INSTALL_DIR\dg.ps1"        -Label "Download dg.ps1"
+    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/graperoot.cmd" -OutFile "$INSTALL_DIR\graperoot.cmd" -Label "Download graperoot.cmd"
+    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/graperoot.ps1" -OutFile "$INSTALL_DIR\graperoot.ps1" -Label "Download graperoot.ps1"
     try {
         Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/version.txt" -OutFile "$INSTALL_DIR\version.txt" -Label "Download version.txt"
     } catch {
@@ -400,18 +447,28 @@ try {
 
     $step = "Installing Python dependencies"
     Write-Host "[install] Installing Python dependencies..."
-    & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --upgrade pip --quiet
-    & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette graperoot --quiet
+    $venvPy = "$INSTALL_DIR\venv\Scripts\python.exe"
+
+    # Write a constraints file that blocks pywin32 permanently.
+    $constraintsFile = Join-Path $INSTALL_DIR "pip-constraints.txt"
+    "pywin32<0`npywin32-ctypes<0" | Set-Content $constraintsFile -Encoding UTF8
+
+    # Use Invoke-Native for ALL pip calls — Python prints pywin32.pth errors to stderr
+    # on startup even after we delete the .pth, and EAP=Stop turns that into a crash.
+    Invoke-Native { & $venvPy -m pip install --upgrade pip --quiet } | Out-Null
+    Invoke-Native { & $venvPy -m pip install "mcp>=1.3.0" uvicorn anyio starlette --quiet --constraint $constraintsFile } | Out-Null
 
     # Verify mcp is importable
     $step = "Verifying MCP import"
-    $check = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>&1
-    if ($check -ne "ok") {
-        Write-Host "[install] Warning: mcp import check failed. Retrying install..."
-        & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install "mcp>=1.3.0" uvicorn anyio starlette graperoot
-        $check = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>&1
-        if ($check -ne "ok") {
-            throw "Failed to install 'mcp' Python package."
+    $checkOut = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>$null
+    if ($checkOut -ne "ok") {
+        Write-Host "[install] Warning: mcp import check failed. Retrying with --force-reinstall..."
+        & "$INSTALL_DIR\venv\Scripts\python.exe" -m pip install --force-reinstall "mcp>=1.3.0" uvicorn anyio starlette --quiet
+        $checkOut = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp; print('ok')" 2>$null
+        if ($checkOut -ne "ok") {
+            # Capture the actual error for telemetry
+            $errDetail = & "$INSTALL_DIR\venv\Scripts\python.exe" -c "import mcp" 2>&1 | Out-String
+            throw "Failed to install 'mcp' Python package. Detail: $errDetail"
         }
     }
 
@@ -422,15 +479,21 @@ try {
         [Environment]::SetEnvironmentVariable("PATH", "$userPath;$INSTALL_DIR", "User")
         Write-Host "[install] Added $INSTALL_DIR to PATH"
     }
+    # Also refresh current session PATH so dgc works immediately without reopening terminal
+    if ($env:PATH -notlike "*$INSTALL_DIR*") {
+        $env:PATH = "$env:PATH;$INSTALL_DIR"
+    }
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
     Write-Host "  Installation complete!" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  Open a NEW terminal, then run:" -ForegroundColor White
-    Write-Host "    dgc `"C:\path\to\your\project`"   # Claude Code" -ForegroundColor White
-    Write-Host "    dg  `"C:\path\to\your\project`"   # Codex CLI" -ForegroundColor White
+    Write-Host "  Run now in this terminal:" -ForegroundColor White
+    Write-Host "    dgc `"C:\path\to\your\project`"              # Claude Code" -ForegroundColor White
+    Write-Host "    dg  `"C:\path\to\your\project`"              # Codex CLI" -ForegroundColor White
+    Write-Host "    graperoot `"C:\path\to\your\project`" --cursor   # Cursor IDE" -ForegroundColor White
+    Write-Host "    graperoot `"C:\path\to\your\project`" --gemini   # Gemini CLI" -ForegroundColor White
     Write-Host ""
 
 } catch {
@@ -438,25 +501,7 @@ try {
     Write-Host "`n[install] ERROR: Installation failed during: $step" -ForegroundColor Red
     Write-Host "[install] Details: $errMessage" -ForegroundColor Red
 
-    # Try to send telemetry
-    try {
-        $machineId = (Get-CimInstance -ClassName Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID
-        if ([string]::IsNullOrWhiteSpace($machineId)) { $machineId = "$env:COMPUTERNAME" }
-
-        $errorPayload = @{
-            type          = "install_error"
-            platform      = "windows"
-            machine_id    = $machineId
-            error_message = $errMessage
-            script_step   = $step
-        }
-
-        Invoke-RestMethod -Uri $WEBHOOK_URL -Method Post -ContentType "application/json" -Body ($errorPayload | ConvertTo-Json -Compress) -TimeoutSec 5 -ErrorAction SilentlyContinue | Out-Null
-    } catch {
-        # Ignore reporting errors
-    }
-
-    Write-Host "`n[install] We've logged this error, but if you need help, please open an issue here:" -ForegroundColor Yellow
+    Write-Host "`n[install] If you need help, please open an issue here:" -ForegroundColor Yellow
     Write-Host "[install]   https://github.com/kunal12203/Codex-CLI-Compact/issues/new" -ForegroundColor Yellow
     exit 1
 }

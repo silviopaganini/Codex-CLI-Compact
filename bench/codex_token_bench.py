@@ -13,8 +13,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE = Path("/Users/krishnakant/Documents/Open source/Claude-CLI-Compact-core")
-PYTHON = Path("/Users/krishnakant/.dual-graph/venv/bin/python3")
+CORE = Path(os.environ.get("DG_CORE_DIR", str(ROOT.parent)))
+PYTHON = Path(os.environ.get("DG_VENV_PYTHON", os.path.expanduser("~/.dual-graph/venv/bin/python3")))
 GRAPH_BUILDER = CORE / "graph_builder.py"
 MCP_SERVER = CORE / "mcp_graph_server.py"
 PROMPTS_FILE = ROOT / "bench" / "restaurant_crm_prompts.txt"

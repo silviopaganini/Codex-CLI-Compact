@@ -19,14 +19,23 @@ function Get-MachineId {
     try {
         if (Test-Path $identityPath) {
             $identity = Get-Content $identityPath -Raw | ConvertFrom-Json
-            if ($identity.machine_id) { return "$($identity.machine_id)" }
+            if ($identity.machine_id -and $identity.installed_date) { return "$($identity.machine_id)" }
+            # Existing users: just stamp installed_date, keep their ID intact
+            if ($identity.machine_id) {
+                $identity | Add-Member -NotePropertyName installed_date -NotePropertyValue (Get-Date -Format "yyyy-MM-dd") -Force
+                $identity | ConvertTo-Json -Compress | Set-Content -Path $identityPath -Encoding UTF8
+                return "$($identity.machine_id)"
+            }
         }
     } catch {}
+    # No identity.json or no machine_id — generate a random one and save it
     try {
-        $uuid = (Get-CimInstance -ClassName Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID
-        if ($uuid) { return "$uuid" }
+        $mid = [System.Guid]::NewGuid().ToString("N")
+        $identity = @{ machine_id = $mid; platform = "windows"; installed_date = (Get-Date -Format "yyyy-MM-dd"); tool = "launcher-ps1" }
+        New-Item -ItemType Directory -Force -Path $DG | Out-Null
+        $identity | ConvertTo-Json -Compress | Set-Content -Path $identityPath -Encoding UTF8
+        return $mid
     } catch {}
-    if ($env:COMPUTERNAME) { return $env:COMPUTERNAME }
     return "unknown"
 }
 
@@ -249,7 +258,9 @@ try {
                     @{ Primary = "$BaseUrl/bin/dgc.ps1";             Fallback = "$R2/dgc.ps1";            Out = (Join-Path $DG "dgc.ps1") },
                     @{ Primary = "$BaseUrl/bin/dg.ps1";              Fallback = "$R2/dg.ps1";             Out = (Join-Path $DG "dg.ps1") },
                     @{ Primary = "$BaseUrl/bin/dgc.cmd";             Fallback = "$R2/dgc.cmd";            Out = (Join-Path $DG "dgc.cmd") },
-                    @{ Primary = "$BaseUrl/bin/dg.cmd";              Fallback = "$R2/dg.cmd";             Out = (Join-Path $DG "dg.cmd") }
+                    @{ Primary = "$BaseUrl/bin/dg.cmd";              Fallback = "$R2/dg.cmd";             Out = (Join-Path $DG "dg.cmd") },
+                    @{ Primary = "$BaseUrl/bin/graperoot.ps1";       Fallback = "$R2/graperoot.ps1";      Out = (Join-Path $DG "graperoot.ps1") },
+                    @{ Primary = "$BaseUrl/bin/graperoot.cmd";       Fallback = "$R2/graperoot.cmd";      Out = (Join-Path $DG "graperoot.cmd") }
                 )
                 foreach ($item in $downloads) { [void](Download-File $item.Primary $item.Fallback $item.Out) }
                 $dgPs1 = Join-Path $DG "dg.ps1"
@@ -259,6 +270,29 @@ try {
                 # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
                 $venvPip = Join-Path $DG "venv\Scripts\pip.exe"
                 if (Test-Path $venvPip) { Invoke-NativeQuiet $venvPip @("install", "graperoot", "--upgrade", "--quiet") | Out-Null }
+                # Show changelog for new version (max 3 lines)
+                try {
+                    $changelog = ""
+                    try { $changelog = (Invoke-WebRequest -Uri "$BaseUrl/bin/changelog.txt" -TimeoutSec 5 -UseBasicParsing).Content } catch {
+                        try { $changelog = (Invoke-WebRequest -Uri "$R2/changelog.txt" -TimeoutSec 5 -UseBasicParsing).Content } catch {}
+                    }
+                    if ($changelog) {
+                        $notes = @(); $inVer = $false
+                        foreach ($line in $changelog -split "`n") {
+                            $line = $line.TrimEnd()
+                            if ($line -eq $remoteVer) { $inVer = $true; continue }
+                            if ($inVer) {
+                                if ($line -eq "" -and $notes.Count -gt 0) { break }
+                                if ($line.StartsWith("-")) { $notes += $line.Trim() }
+                                if ($notes.Count -eq 3) { break }
+                            }
+                        }
+                        if ($notes.Count -gt 0) {
+                            Write-Host "[$Tool] What's new in $remoteVer`:"
+                            foreach ($n in $notes) { Write-Host "[$Tool]   $n" }
+                        }
+                    }
+                } catch {}
                 Write-Host "[$Tool] Updated to $remoteVer. Restarting..."
                 $updatedScript = Join-Path $DG "dg.ps1"
                 if (Test-Path $updatedScript) { & $updatedScript $ProjectPath; exit $LASTEXITCODE }

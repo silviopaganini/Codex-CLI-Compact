@@ -1,14 +1,29 @@
 # dgc - Claude Code + dual-graph MCP launcher (PowerShell)
 param(
     [Parameter(Position = 0)]
-    [string]$ProjectPath = "."
+    [string]$Arg0 = ".",
+    [Parameter(Position = 1)]
+    [string]$Arg1 = "",
+    [Parameter(Position = 2)]
+    [string]$Arg2 = "",
+    [string]$Resume = ""
 )
 
 $ErrorActionPreference = "Stop"
 
+# Resolve $ProjectPath and $Resume from positional args.
+# Supports both PowerShell convention (-Resume <id>) and Unix convention (--resume <id>).
+if ($Arg0 -eq "--resume") {
+    $ProjectPath = (Get-Location).Path
+    if (-not $Resume) { $Resume = $Arg1 }
+} else {
+    $ProjectPath = $Arg0
+    if ($Arg1 -eq "--resume" -and -not $Resume) { $Resume = $Arg2 }
+}
+
 $DG = Join-Path $env:USERPROFILE ".dual-graph"
 $Tool = "dgc"
-$PolicyMarker = "dgc-policy-v10"
+$PolicyMarker = "dgc-policy-v11"
 $R2 = "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 $BaseUrl = "https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
 $WebhookUrl = "https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
@@ -21,14 +36,23 @@ function Get-MachineId {
     try {
         if (Test-Path $identityPath) {
             $identity = Get-Content $identityPath -Raw | ConvertFrom-Json
-            if ($identity.machine_id) { return "$($identity.machine_id)" }
+            if ($identity.machine_id -and $identity.installed_date) { return "$($identity.machine_id)" }
+            # Existing users: just stamp installed_date, keep their ID intact
+            if ($identity.machine_id) {
+                $identity | Add-Member -NotePropertyName installed_date -NotePropertyValue (Get-Date -Format "yyyy-MM-dd") -Force
+                $identity | ConvertTo-Json -Compress | Set-Content -Path $identityPath -Encoding UTF8
+                return "$($identity.machine_id)"
+            }
         }
     } catch {}
+    # No identity.json or no machine_id — generate a random one and save it
     try {
-        $uuid = (Get-CimInstance -ClassName Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID
-        if ($uuid) { return "$uuid" }
+        $mid = [System.Guid]::NewGuid().ToString("N")
+        $identity = @{ machine_id = $mid; platform = "windows"; installed_date = (Get-Date -Format "yyyy-MM-dd"); tool = "launcher-ps1" }
+        New-Item -ItemType Directory -Force -Path $DG | Out-Null
+        $identity | ConvertTo-Json -Compress | Set-Content -Path $identityPath -Encoding UTF8
+        return $mid
     } catch {}
-    if ($env:COMPUTERNAME) { return $env:COMPUTERNAME }
     return "unknown"
 }
 
@@ -117,11 +141,13 @@ function Ensure-Line([string]$File, [string]$Line) {
 function Invoke-NativeQuiet([string]$FilePath, [string[]]$Arguments) {
     $hasNativePref = Test-Path variable:PSNativeCommandUseErrorActionPreference
     if ($hasNativePref) { $previousNativePref = $PSNativeCommandUseErrorActionPreference }
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     try {
         if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $false }
         & $FilePath @Arguments > $null 2>&1
         return $LASTEXITCODE
     } finally {
+        $ErrorActionPreference = $prevEAP
         if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $previousNativePref }
     }
 }
@@ -129,10 +155,12 @@ function Invoke-NativeQuiet([string]$FilePath, [string[]]$Arguments) {
 function Invoke-NativeCapture([string]$FilePath, [string[]]$Arguments) {
     $hasNativePref = Test-Path variable:PSNativeCommandUseErrorActionPreference
     if ($hasNativePref) { $previousNativePref = $PSNativeCommandUseErrorActionPreference }
+    $prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     try {
         if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $false }
         return & $FilePath @Arguments 2>$null
     } finally {
+        $ErrorActionPreference = $prevEAP
         if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $previousNativePref }
     }
 }
@@ -323,7 +351,9 @@ try {
                     @{ Primary = "$BaseUrl/bin/dgc.ps1";             Fallback = "$R2/dgc.ps1";            Out = (Join-Path $DG "dgc.ps1") },
                     @{ Primary = "$BaseUrl/bin/dg.ps1";              Fallback = "$R2/dg.ps1";             Out = (Join-Path $DG "dg.ps1") },
                     @{ Primary = "$BaseUrl/bin/dgc.cmd";             Fallback = "$R2/dgc.cmd";            Out = (Join-Path $DG "dgc.cmd") },
-                    @{ Primary = "$BaseUrl/bin/dg.cmd";              Fallback = "$R2/dg.cmd";             Out = (Join-Path $DG "dg.cmd") }
+                    @{ Primary = "$BaseUrl/bin/dg.cmd";              Fallback = "$R2/dg.cmd";             Out = (Join-Path $DG "dg.cmd") },
+                    @{ Primary = "$BaseUrl/bin/graperoot.ps1";       Fallback = "$R2/graperoot.ps1";      Out = (Join-Path $DG "graperoot.ps1") },
+                    @{ Primary = "$BaseUrl/bin/graperoot.cmd";       Fallback = "$R2/graperoot.cmd";      Out = (Join-Path $DG "graperoot.cmd") }
                 )
                 foreach ($item in $downloads) { [void](Download-File $item.Primary $item.Fallback $item.Out) }
                 $dgcPs1 = Join-Path $DG "dgc.ps1"
@@ -333,9 +363,32 @@ try {
                 # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
                 $venvPip = Join-Path $DG "venv\Scripts\pip.exe"
                 if (Test-Path $venvPip) { Invoke-NativeQuiet $venvPip @("install", "graperoot", "--upgrade", "--quiet") | Out-Null }
+                # Show changelog for new version (max 3 lines)
+                try {
+                    $changelog = ""
+                    try { $changelog = (Invoke-WebRequest -Uri "$BaseUrl/bin/changelog.txt" -TimeoutSec 5 -UseBasicParsing).Content } catch {
+                        try { $changelog = (Invoke-WebRequest -Uri "$R2/changelog.txt" -TimeoutSec 5 -UseBasicParsing).Content } catch {}
+                    }
+                    if ($changelog) {
+                        $notes = @(); $inVer = $false
+                        foreach ($line in $changelog -split "`n") {
+                            $line = $line.TrimEnd()
+                            if ($line -eq $remoteVer) { $inVer = $true; continue }
+                            if ($inVer) {
+                                if ($line -eq "" -and $notes.Count -gt 0) { break }
+                                if ($line.StartsWith("-")) { $notes += $line.Trim() }
+                                if ($notes.Count -eq 3) { break }
+                            }
+                        }
+                        if ($notes.Count -gt 0) {
+                            Write-Host "[$Tool] What's new in $remoteVer`:"
+                            foreach ($n in $notes) { Write-Host "[$Tool]   $n" }
+                        }
+                    }
+                } catch {}
                 Write-Host "[$Tool] Updated to $remoteVer. Restarting..."
                 $updatedScript = Join-Path $DG "dgc.ps1"
-                if (Test-Path $updatedScript) { & $updatedScript $ProjectPath; exit $LASTEXITCODE }
+                if (Test-Path $updatedScript) { if ($Resume) { & $updatedScript $ProjectPath -Resume $Resume } else { & $updatedScript $ProjectPath }; exit $LASTEXITCODE }
             }
         } catch {}
     }
@@ -419,13 +472,48 @@ try {
     $pip = Join-Path $DG "venv\Scripts\pip.exe"
     $VenvBin = Join-Path $DG "venv\Scripts"
 
+    # Kill any previous MCP server BEFORE the graperoot upgrade.
+    # pip upgrade replaces graph-builder.exe and mcp-graph-server.exe — if mcp-graph-server.exe
+    # is still running, pip deletes graph-builder.exe (step 1) then hits WinError 32 on the
+    # locked mcp-graph-server.exe (step 2), leaving graperoot half-uninstalled.
+    # Use taskkill /F — it kills processes from other terminal sessions where Stop-Process
+    # gets "Access Denied" because it only works on processes owned by the current session.
+    $pidFile = Join-Path $DG "mcp_server.pid"
+    $portFile = Join-Path $DG "mcp_port"
+    if (Test-Path $pidFile) {
+        try { Stop-Process -Id ([int](Get-Content $pidFile -Raw)) -Force -ErrorAction SilentlyContinue } catch {}
+        Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    }
+    # taskkill /F works across sessions; Stop-Process is a fallback for non-Windows
+    try { & taskkill /F /IM "mcp-graph-server.exe" /T 2>$null } catch {}
+    try { & taskkill /F /IM "graph-builder.exe" /T 2>$null } catch {}
+    # Also kill by port (catches renamed or custom server processes)
+    try {
+        Get-NetTCPConnection -LocalPort (8080..8099) -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess -Unique |
+            ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } catch {} }
+    } catch {}
+    Start-Sleep -Milliseconds 500
+
     # Auto-install compiled graperoot package (silent fallback to .py if it fails)
     $grapeOk = $false
-    if ((Invoke-NativeQuiet $Python @("-c", "import graperoot")) -eq 0) {
-        $grapeOk = $true
-    } else {
-        if ((Invoke-NativeQuiet $pip @("install", "graperoot", "--upgrade", "--quiet")) -eq 0) {
+    $grapeBuilderExe = Join-Path $VenvBin "graph-builder.exe"
+    if ((Invoke-NativeQuiet $Python @("-c", "import graperoot.graph_builder")) -eq 0) {
+        # graph_builder submodule is importable — also verify graph-builder.exe exists.
+        # A partial pip upgrade deletes graph-builder.exe first, then fails on the locked
+        # mcp-graph-server.exe, leaving graperoot importable but graph-builder.exe missing.
+        if (Test-Path $grapeBuilderExe) {
             $grapeOk = $true
+        } else {
+            Write-Host "[$Tool] graperoot partially installed (graph-builder.exe missing) -- reinstalling..."
+        }
+    } elseif ((Invoke-NativeQuiet $Python @("-c", "import graperoot")) -eq 0) {
+        # graperoot imports but graph_builder submodule is missing (broken sdist install)
+        Write-Host "[$Tool] graperoot.graph_builder missing -- upgrading graperoot..."
+    }
+    if (-not $grapeOk) {
+        if ((Invoke-NativeQuiet $pip @("install", "graperoot", "--upgrade", "--quiet")) -eq 0) {
+            $grapeOk = (Test-Path $grapeBuilderExe)
         }
     }
     # Safety net: if graperoot still missing AND .py fallback files are gone, force reinstall
@@ -446,6 +534,16 @@ try {
         @("graph_builder.py", "dg.py", "mcp_graph_server.py", "context_packer.py", "dgc_claude.py") | ForEach-Object {
             Remove-Item (Join-Path $DG $_) -ErrorAction SilentlyContinue
         }
+    }
+
+    # Validate project path exists before resolving
+    if (-not (Test-Path -LiteralPath $ProjectPath)) {
+        $msg = "Project path not found: $ProjectPath"
+        Write-Host "[$Tool] ERROR: $msg" -ForegroundColor Red
+        Write-Host "[$Tool] Check that the path exists and try again."
+        Send-CliError "Validating project path" $msg
+        Stop-McpServer $pidFile $portFile
+        exit 1
     }
 
     # Use Get-Item to get the canonical Windows path with correct casing
@@ -481,10 +579,106 @@ try {
 
     if ($needWrite) {
         Write-Host "[$Tool] Writing CLAUDE.md policy..."
-        try {
-            $template = Get-Text "$BaseUrl/CLAUDE.md.template"
-        } catch {
-            $template = Get-Text "$R2/CLAUDE.md.template"
+        $template = $null
+        try { $template = Get-Text "$BaseUrl/CLAUDE.md.template" } catch {}
+        if (-not $template) {
+            # Hardcoded fallback — used when GitHub is unreachable (e.g. Cloudflare-blocking ISPs)
+            $template = @"
+<!-- $PolicyMarker -->
+# Dual-Graph Context Policy
+
+This project uses a local dual-graph MCP server for efficient context retrieval.
+
+## MANDATORY: Adaptive graph_continue rule
+
+**Call ``graph_continue`` ONLY when you do NOT already know the relevant files.**
+
+### Call ``graph_continue`` when:
+- This is the first message of a new task / conversation
+- The task shifts to a completely different area of the codebase
+- You need files you haven't read yet in this session
+
+### SKIP ``graph_continue`` when:
+- You already identified the relevant files earlier in this conversation
+- You are doing follow-up work on files already read (verify, refactor, test, docs, cleanup, commit)
+- The task is pure text (writing a commit message, summarising, explaining)
+
+**If skipping, go directly to ``graph_read`` on the already-known ``file::symbol``.**
+
+## When you DO call graph_continue
+
+1. **If ``graph_continue`` returns ``needs_project=true``**: call ``graph_scan`` with ``pwd``. Do NOT ask the user.
+
+2. **If ``graph_continue`` returns ``skip=true``**: fewer than 5 files — read only specifically named files.
+
+3. **Read ``recommended_files``** using ``graph_read``.
+   - Always use ``file::symbol`` notation (e.g. ``src/auth.ts::handleLogin``) — never read whole files.
+   - ``recommended_files`` entries that already contain ``::`` must be passed verbatim.
+
+4. **Obey confidence caps:**
+   - ``confidence=high`` -> Stop. Do NOT grep or explore further.
+   - ``confidence=medium`` -> ``fallback_rg`` at most ``max_supplementary_greps`` times, then ``graph_read`` at most ``max_supplementary_files`` more symbols. Stop.
+   - ``confidence=low`` -> same as medium. Stop.
+
+## Session State (compact, update after every turn)
+
+Maintain a short JSON block in your working memory. Update it after each turn:
+
+``````json
+{
+  "files_identified": ["path/to/file.py"],
+  "symbols_changed": ["module::function"],
+  "fix_applied": true,
+  "features_added": ["description"],
+  "open_issues": ["one-line note"]
+}
+``````
+
+Use this state — not prose summaries — to remember what's been done across turns.
+
+## Token Usage
+
+A ``token-counter`` MCP is available for tracking live token usage.
+
+- Before reading a large file: ``count_tokens({text: "<content>"})`` to check cost first.
+- To show running session cost: ``get_session_stats()``
+- To log completed task: ``log_usage({input_tokens: N, output_tokens: N, description: "task"})``
+
+## Rules
+
+- Do NOT use ``rg``, ``grep``, or bash file exploration before calling ``graph_continue`` (when required).
+- Do NOT do broad/recursive exploration at any confidence level.
+- ``max_supplementary_greps`` and ``max_supplementary_files`` are hard caps — never exceed them.
+- Do NOT call ``graph_continue`` more than once per turn.
+- Always use ``file::symbol`` notation with ``graph_read`` — never bare filenames.
+- After edits, call ``graph_register_edit`` with changed files using ``file::symbol`` notation.
+
+## Context Store
+
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to ``.dual-graph/context-store.json``.
+
+**Entry format:**
+``````json
+{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
+``````
+
+**To append:** Read the file -> add the new entry to the array -> Write it back -> call ``graph_register_edit`` on ``.dual-graph/context-store.json``.
+
+**Rules:**
+- Only log things worth remembering across sessions (not every minor detail)
+- ``content`` must be under 15 words
+- ``files`` lists the files this decision/task relates to (can be empty)
+- Log immediately when the item arises — not at session end
+
+## Session End
+
+When the user signals they are done (e.g. "bye", "done", "wrap up", "end session"), proactively update ``CONTEXT.md`` in the project root with:
+- **Current Task**: one sentence on what was being worked on
+- **Key Decisions**: bullet list, max 3 items
+- **Next Steps**: bullet list, max 3 items
+
+Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation — only what's needed to resume next session.
+"@
         }
         Set-Content -Path $DocFile -Value $template -Encoding UTF8
         Write-Host "[$Tool] CLAUDE.md written."
@@ -501,6 +695,11 @@ try {
     Write-Host "[$Tool] Project : $resolvedProject"
     Write-Host "[$Tool] Data    : $DataDir"
     Write-Host ""
+    # Use Continue for all native-command calls (graph-builder, mcp-graph-server, claude)
+    # so that stderr output (tracebacks, npm notices) doesn't become a terminating error
+    # under the global $ErrorActionPreference = "Stop".
+    $prevEAPNative = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+
     Write-Host "[$Tool] Scanning project..."
     if ($grapeOk) {
         & (Join-Path $VenvBin "graph-builder.exe") --root $resolvedProject --out (Join-Path $DataDir "info_graph.json") 2> $scanErr
@@ -538,7 +737,9 @@ try {
         Remove-Item $portFile -Force -ErrorAction SilentlyContinue
     }
 
-    # Kill any orphaned MCP server processes left by previous failed runs.
+    # Kill any orphaned MCP server processes left by previous sessions.
+    # taskkill /F works across terminal sessions; Stop-Process only works within same session.
+    try { & taskkill /F /IM "mcp-graph-server.exe" /T 2>$null } catch {}
     try {
         Get-NetTCPConnection -LocalPort (8080..8099) -State Listen -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty OwningProcess -Unique |
@@ -567,6 +768,17 @@ try {
     }
     Write-Host "[$Tool] MCP server ready on port $port."
     Write-Host ""
+
+    # Pre-check: claude must be in PATH
+    $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
+    if (-not $claudeCmd) {
+        $msg = "Claude Code CLI not found in PATH. Install it with: npm install -g @anthropic-ai/claude-code"
+        Write-Host "[$Tool] ERROR: $msg" -ForegroundColor Red
+        Write-Host "[$Tool] After installing, close and reopen your terminal, then run dgc again."
+        Send-CliError "Checking prerequisites" $msg
+        Stop-McpServer $pidFile $portFile
+        exit 1
+    }
 
     # PowerShell 7 can treat non-zero native exits as terminating errors.
     # Handle Claude CLI exits explicitly so "not found" on remove stays harmless.
@@ -800,8 +1012,30 @@ if ($transcript -and (Test-Path $transcript)) {
     $hasNativePref = Test-Path variable:PSNativeCommandUseErrorActionPreference
     if ($hasNativePref) { $prevNativePref = $PSNativeCommandUseErrorActionPreference; $global:PSNativeCommandUseErrorActionPreference = $false }
     try {
-        & claude
+        if ($Resume) { & claude --resume $Resume } else { & claude }
         $claudeExit = $LASTEXITCODE
+        # Show resume hint — filter by project to avoid showing wrong session
+        try {
+            $historyFile = Join-Path $env:USERPROFILE ".claude\history.jsonl"
+            if (Test-Path $historyFile) {
+                $normalizedProject = $resolvedProject.TrimEnd('\','/')
+                $lastId = ""
+                foreach ($line in [System.IO.File]::ReadAllLines($historyFile)) {
+                    try {
+                        $entry = $line | ConvertFrom-Json
+                        $entryProject = $entry.project.TrimEnd('\','/')
+                        if ($entryProject -eq $normalizedProject -and $entry.sessionId) {
+                            $lastId = $entry.sessionId
+                        }
+                    } catch {}
+                }
+                if ($lastId) {
+                    Write-Host ""
+                    Write-Host "[$Tool] To resume this session with dual-graph:"
+                    Write-Host "[$Tool]   dgc --resume `"$lastId`""
+                }
+            }
+        } catch {}
     } finally {
         Pop-Location
         if ($hasNativePref) { $global:PSNativeCommandUseErrorActionPreference = $prevNativePref }
@@ -810,6 +1044,9 @@ if ($transcript -and (Test-Path $transcript)) {
     if ($claudeExit -ne 0 -and $claudeExit -ne 130 -and $claudeExit -ne -1073741510) {
         Send-CliError "Running Claude" "Claude exited with code $claudeExit in dgc.ps1"
     }
+
+    # Restore strict error handling for cleanup
+    $ErrorActionPreference = $prevEAPNative
 
     Write-Host ""
     Write-Host "[$Tool] Cleaning up..."
@@ -832,7 +1069,11 @@ if ($transcript -and (Test-Path $transcript)) {
     exit $claudeExit
 } catch {
     $message = "$($_.Exception.Message)"
-    if ($message) { Send-CliError "Launcher" $message }
+    # Include script location if available for better diagnostics
+    $location = if ($_.InvocationInfo -and $_.InvocationInfo.ScriptLineNumber) { " [line $($_.InvocationInfo.ScriptLineNumber)]" } else { "" }
+    $detail = "$message$location"
+    if ($detail.Length -gt 700) { $detail = $detail.Substring(0, 700) }
+    if ($detail) { Send-CliError "Launcher" $detail }
     Write-Host "[$Tool] Error: $message" -ForegroundColor Red
     exit 1
 }

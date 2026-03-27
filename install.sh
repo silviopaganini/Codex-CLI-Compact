@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-LICENSE_SERVER="https://dual-graph-license-production.up.railway.app"
+
 INSTALL_DIR="$HOME/.dual-graph"
 VENV="$INSTALL_DIR/venv"
 mkdir -p "$INSTALL_DIR"
@@ -229,62 +229,37 @@ echo ""
 
 echo "[install] Using $($PYTHON --version)"
 
-# ── License check ─────────────────────────────────────────────────────────────
-echo "[install] Checking license..."
-
-LICENSE_KEY="${DG_LICENSE_KEY:-}"
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
-if [[ "$PLATFORM" == "darwin" ]]; then
-  MACHINE_ID="$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/{print $4}')"
-elif [[ -f /etc/machine-id ]]; then
-  MACHINE_ID="$(cat /etc/machine-id)"
-elif [[ -f /var/lib/dbus/machine-id ]]; then
-  MACHINE_ID="$(cat /var/lib/dbus/machine-id)"
-fi
+# Check for existing random ID (preserve across reinstalls)
+MACHINE_ID=$("$PYTHON" -c "
+import json, os
+try:
+    d = json.load(open(os.path.expanduser('~/.dual-graph/identity.json')))
+    mid = d.get('machine_id', '')
+    if mid and 'installed_date' in d:
+        print(mid)
+except Exception:
+    pass
+" 2>/dev/null || true)
 if [[ -z "${MACHINE_ID:-}" ]]; then
-  MACHINE_ID=$("$PYTHON" -c "import uuid; print(uuid.getnode())" 2>/dev/null || echo "unknown")
-fi
-
-VALIDATE_RESP=$(curl -sf -X POST "$LICENSE_SERVER/validate" \
-  -H "Content-Type: application/json" \
-  -d "{\"key\":\"$LICENSE_KEY\",\"machine_id\":\"$MACHINE_ID\",\"platform\":\"$PLATFORM\",\"tool\":\"install-sh\"}" 2>/dev/null || echo '{"ok":false,"error":"server unreachable"}')
-
-OK=$(echo "$VALIDATE_RESP" | "$PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('ok','false'))" 2>/dev/null || echo "false")
-
-if [[ "$OK" == "True" || "$OK" == "true" ]]; then
-  echo "[install] License validated."
-else
-  ERR=$(echo "$VALIDATE_RESP" | "$PYTHON" -c "import sys,json; print(json.load(sys.stdin).get('error','unknown'))" 2>/dev/null || echo "unknown")
-  echo "[install] License check returned: $ERR"
-  echo "[install] Continuing installation..."
+  MACHINE_ID=$("$PYTHON" -c "import uuid; print(uuid.uuid4().hex)" 2>/dev/null || echo "unknown")
 fi
 
 # Save identity so MCP server can ping on each startup (tracks real usage)
 "$PYTHON" -c "
 import json, os
-d = {'machine_id': '$MACHINE_ID', 'platform': '$PLATFORM', 'tool': 'install-sh'}
+import datetime
+d = {'machine_id': '$MACHINE_ID', 'platform': '$PLATFORM', 'installed_date': datetime.date.today().isoformat(), 'tool': 'install-sh'}
 open(os.path.expanduser('$HOME/.dual-graph/identity.json'), 'w').write(json.dumps(d))
 " 2>/dev/null || true
 
 # Save install date for one-time feedback prompt
 date +%Y-%m-%d > "$INSTALL_DIR/install_date.txt" 2>/dev/null || true
 
-# ── Get file URLs from license server response ────────────────────────────────
-get_url() {
-  echo "$VALIDATE_RESP" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-files = d.get('files', {})
-print(files.get('$1', ''))
-" 2>/dev/null || echo ""
-}
-
-URL_LAUNCH=$(get_url dual_graph_launch)
-
-# Fallback to Cloudflare R2 if server returned empty URLs
+# ── Download URLs ─────────────────────────────────────────────────────────────
 R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
-[[ -z "$URL_LAUNCH" ]] && URL_LAUNCH="$R2/dual_graph_launch.sh"
+URL_LAUNCH="$R2/dual_graph_launch.sh"
 
 # ── Download core engine ──────────────────────────────────────────────────────
 echo "[install] Downloading core engine..."
@@ -294,19 +269,28 @@ curl -sf  "$BASE_URL/bin/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null 
   || true
 
 echo "[install] Downloading CLI tools..."
-curl -fsSL "$BASE_URL/bin/dgc" -o "$INSTALL_DIR/dgc" && chmod +x "$INSTALL_DIR/dgc"
-curl -fsSL "$BASE_URL/bin/dg"  -o "$INSTALL_DIR/dg"  && chmod +x "$INSTALL_DIR/dg"
+curl -fsSL "$BASE_URL/bin/dgc"       -o "$INSTALL_DIR/dgc"       && chmod +x "$INSTALL_DIR/dgc"
+curl -fsSL "$BASE_URL/bin/dg"        -o "$INSTALL_DIR/dg"        && chmod +x "$INSTALL_DIR/dg"
+curl -fsSL "$BASE_URL/bin/graperoot" -o "$INSTALL_DIR/graperoot" && chmod +x "$INSTALL_DIR/graperoot"
 
 echo "[install] Creating Python venv at $VENV ..."
 "$PYTHON" -m venv "$VENV"
 
 echo "[install] Installing Python dependencies..."
 "$VENV/bin/pip" install --upgrade pip --quiet
-"$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette graperoot --quiet
+"$VENV/bin/pip" install "mcp>=1.3.0" uvicorn anyio starlette --quiet
 
 # Add to PATH if not already there
+# On macOS, bash login shells (new terminal windows) read ~/.bash_profile not ~/.bashrc.
+# zsh always reads ~/.zshrc. Linux bash reads ~/.bashrc.
 SHELL_RC="$HOME/.zshrc"
-[[ "$SHELL" == */bash ]] && SHELL_RC="$HOME/.bashrc"
+if [[ "$SHELL" == */bash ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    SHELL_RC="$HOME/.bash_profile"
+  else
+    SHELL_RC="$HOME/.bashrc"
+  fi
+fi
 if ! grep -q '.dual-graph' "$SHELL_RC" 2>/dev/null; then
   echo 'export PATH="$PATH:$HOME/.dual-graph"' >> "$SHELL_RC"
   echo "[install] Added ~/.dual-graph to PATH in $SHELL_RC"
@@ -321,8 +305,10 @@ echo "  Run once:"
 echo "    source $SHELL_RC"
 echo ""
 echo "  Then per project:"
-echo "    dgc /path/to/project   # Claude Code"
-echo "    dg  /path/to/project   # Codex CLI"
+echo "    dgc /path/to/project                  # Claude Code"
+echo "    dg  /path/to/project                  # Codex CLI"
+echo "    graperoot /path/to/project --cursor   # Cursor IDE"
+echo "    graperoot /path/to/project --gemini   # Gemini CLI"
 echo ""
 echo "  Questions, bugs, or feedback? Join the community:"
 echo "    https://discord.gg/rxgVVgCh"

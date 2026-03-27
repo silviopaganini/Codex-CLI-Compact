@@ -1,4 +1,4 @@
-#!/Users/krishnakant/.dual-graph/venv/bin/python3
+#!/usr/bin/env python3
 """3-way benchmark: Normal Claude vs MCP-DGC vs Pre-Injection DGC.
 
 Runs 15 standard prompts through all three modes using `claude -p` with
@@ -30,7 +30,7 @@ VERSION = "3.8.32"
 
 ROOT = Path(__file__).resolve().parent
 _LOCAL_BIN = ROOT.parent / "bin"
-PYTHON = Path("/Users/krishnakant/.dual-graph/venv/bin/python3")
+PYTHON = Path(os.environ.get("DG_VENV_PYTHON", os.path.expanduser("~/.dual-graph/venv/bin/python3")))
 GRAPH_BUILDER = _LOCAL_BIN / "graph_builder.py"
 MCP_SERVER = _LOCAL_BIN / "mcp_graph_server.py"
 

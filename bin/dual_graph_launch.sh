@@ -7,8 +7,8 @@
 set -Eeuo pipefail
 
 ASSISTANT="${1:-}"
-if [[ "$ASSISTANT" != "codex" && "$ASSISTANT" != "claude" ]]; then
-  echo "Usage: $0 <codex|claude> [project_path] [prompt]" >&2
+if [[ "$ASSISTANT" != "codex" && "$ASSISTANT" != "claude" && "$ASSISTANT" != "cursor" && "$ASSISTANT" != "gemini" && "$ASSISTANT" != "opencode" && "$ASSISTANT" != "copilot" ]]; then
+  echo "Usage: $0 <codex|claude|cursor|gemini|opencode|copilot> [project_path] [prompt]" >&2
   exit 2
 fi
 shift
@@ -21,29 +21,63 @@ if [[ "$OSTYPE" == msys* || "$OSTYPE" == cygwin* || "$OSTYPE" == win32* ]]; then
 else
   VENV_BIN="$VENV/bin"
 fi
-PROJECT="${1:-$(pwd)}"
+RESUME_ID=""
+PROMPT=""
+_ARG1="${1:-}"
+_ARG2="${2:-}"
+_ARG3="${3:-}"
+if [[ "$_ARG1" == "--resume" ]]; then
+  PROJECT="$(pwd)"
+  RESUME_ID="$_ARG2"
+elif [[ -n "$_ARG1" ]] && [[ "$_ARG1" != --* ]]; then
+  PROJECT="$_ARG1"
+  if [[ "$_ARG2" == "--resume" ]]; then
+    RESUME_ID="$_ARG3"
+  else
+    PROMPT="$_ARG2"
+  fi
+else
+  PROJECT="$(pwd)"
+  PROMPT="$_ARG1"
+fi
 PROJECT="$(cd "$PROJECT" && pwd)"
-PROMPT="${2:-}"
 DATA_DIR="$PROJECT/.dual-graph"
-TELEMETRY_WEBHOOK="https://script.google.com/macros/s/AKfycbyq_5igbBUORhSqMNktAoX2GQg8BadKcYZOTV-XRUr3vbY3QuK7jjS8EWLg_pZyMDuD/exec"
-REPORTED_ERROR=0
 CURRENT_STEP="Initializing launcher"
 
-if [[ "$ASSISTANT" == "codex" ]]; then
-  TOOL_LABEL="dg"
-else
-  TOOL_LABEL="dgc"
-fi
+case "$ASSISTANT" in
+  codex)  TOOL_LABEL="dg" ;;
+  claude) TOOL_LABEL="dgc" ;;
+  *)      TOOL_LABEL="graperoot" ;;
+esac
 
 echo ""
 echo "[$TOOL_LABEL] If you receive any errors:"
-if [[ "$ASSISTANT" == "codex" ]]; then
-  echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dg again"
-  echo "[$TOOL_LABEL]   2. Update Codex: npm install -g @openai/codex"
-else
-  echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dgc again"
-  echo "[$TOOL_LABEL]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
-fi
+case "$ASSISTANT" in
+  codex)
+    echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dg again"
+    echo "[$TOOL_LABEL]   2. Update Codex: npm install -g @openai/codex"
+    ;;
+  claude)
+    echo "[$TOOL_LABEL]   1. Wait 5 minutes and run dgc again"
+    echo "[$TOOL_LABEL]   2. Update Claude Code: npm install -g @anthropic-ai/claude-code"
+    ;;
+  cursor)
+    echo "[$TOOL_LABEL]   1. Wait 5 minutes and run graperoot again"
+    echo "[$TOOL_LABEL]   2. Reinstall Cursor: https://www.cursor.com"
+    ;;
+  gemini)
+    echo "[$TOOL_LABEL]   1. Wait 5 minutes and run graperoot again"
+    echo "[$TOOL_LABEL]   2. Update Gemini CLI: npm install -g @google/generative-ai"
+    ;;
+  opencode)
+    echo "[$TOOL_LABEL]   1. Wait 5 minutes and run graperoot again"
+    echo "[$TOOL_LABEL]   2. Install OpenCode: npm install -g opencode-ai"
+    ;;
+  copilot)
+    echo "[$TOOL_LABEL]   1. Wait 5 minutes and run graperoot again"
+    echo "[$TOOL_LABEL]   2. Ensure VS Code is installed: https://code.visualstudio.com"
+    ;;
+esac
 echo "[$TOOL_LABEL]   3. Join Discord for help: https://discord.gg/rxgVVgCh"
 echo ""
 
@@ -57,52 +91,36 @@ _platform_name() {
 
 _machine_id() {
   python3 - "$SCRIPT_DIR/identity.json" <<'PY' 2>/dev/null || echo "unknown"
+import datetime
 import json
 import os
 import platform
-import subprocess
 import sys
 import uuid
 from pathlib import Path
 
 identity_path = Path(sys.argv[1])
 
-def get_machine_id() -> str:
-    sys_name = platform.system()
-    try:
-        if sys_name == "Darwin":
-            out = subprocess.check_output(
-                ["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
-                stderr=subprocess.DEVNULL,
-                timeout=3,
-            ).decode()
-            for line in out.splitlines():
-                if "IOPlatformUUID" in line:
-                    return line.split('"')[3]
-        elif sys_name == "Linux":
-            for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
-                try:
-                    val = Path(p).read_text().strip()
-                    if val:
-                        return val
-                except OSError:
-                    pass
-    except Exception:
-        pass
-    return str(uuid.getnode())
+def generate_random_id() -> str:
+    return uuid.uuid4().hex
 
 try:
     if identity_path.exists():
         data = json.loads(identity_path.read_text(encoding="utf-8"))
         mid = data.get("machine_id", "").strip()
         if mid:
+            # Existing users: just stamp installed_date, keep their ID intact
+            if "installed_date" not in data:
+                data["installed_date"] = datetime.date.today().isoformat()
+                identity_path.write_text(json.dumps(data), encoding="utf-8")
             print(mid)
             raise SystemExit(0)
-    mid = get_machine_id()
+    mid = generate_random_id()
     identity_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "machine_id": mid,
         "platform": platform.system().lower(),
+        "installed_date": datetime.date.today().isoformat(),
         "tool": "launcher-auto",
     }
     identity_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -113,40 +131,10 @@ PY
 }
 
 _send_cli_error() {
-  local step="$1"
-  local message="$2"
-  local machine_id platform payload
-  REPORTED_ERROR=1
-  machine_id="$(_machine_id | tr -d '\r\n')"
-  platform="$(_platform_name | tr -d '\r\n')"
-  payload="$(python3 - "$step" "$message" "$machine_id" "$platform" <<'PY' 2>/dev/null || true
-import json, sys
-print(json.dumps({
-    "type": "cli_error",
-    "platform": sys.argv[4],
-    "machine_id": sys.argv[3],
-    "error_message": sys.argv[2],
-    "script_step": sys.argv[1],
-}))
-PY
-)"
-  if [[ -n "$payload" ]]; then
-    curl -sf -X POST "$TELEMETRY_WEBHOOK" \
-      -H "Content-Type: application/json" \
-      -d "$payload" \
-      >/dev/null 2>&1 || true
-  fi
+  : # error telemetry removed
 }
 
-_on_launcher_err() {
-  local rc="$?"
-  if [[ "$ASSISTANT" == "claude" && "$REPORTED_ERROR" != "1" ]]; then
-    _send_cli_error "${CURRENT_STEP:-Unknown step}" "Unhandled launcher failure in dual_graph_launch.sh (exit=$rc)"
-  fi
-  return "$rc"
-}
-
-trap '_on_launcher_err' ERR
+trap '' ERR
 
 _version_gt() {
   local remote="$1"
@@ -217,10 +205,10 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   POLICY_MARKER="dg-policy-v5"
   CONTEXT_DIR="$PROJECT/.dual-graph-context"
 else
-  TOOL_LABEL="dgc"
+  # claude, cursor, gemini all share CLAUDE.md as their context policy file
   DOC_FILE="$PROJECT/CLAUDE.md"
   DOC_NAME="CLAUDE.md"
-  POLICY_MARKER="dgc-policy-v10"
+  POLICY_MARKER="dgc-policy-v11"
 fi
 
 # ── Self-update ────────────────────────────────────────────────────────────────
@@ -247,20 +235,58 @@ if [[ -n "$_REMOTE_VER" ]] && _version_gt "$_REMOTE_VER" "$_LOCAL_VER"; then
     echo "$_REMOTE_VER" > "$_NOTICE_FILE" 2>/dev/null || true
   fi
   echo "[$TOOL_LABEL] Update available ($_LOCAL_VER → $_REMOTE_VER) — updating..."
-  curl -fsSL "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
-    || curl -fsSL "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
+  curl -fsSL --max-time 30 "$_BASE_URL/bin/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh" \
+    || curl -fsSL --max-time 30 "$_R2/dual_graph_launch.sh" -o "$SCRIPT_DIR/dual_graph_launch.sh"
   chmod +x "$SCRIPT_DIR/dual_graph_launch.sh"
+  # Also update graperoot (new unified launcher) + Windows files
+  curl -fsSL --max-time 15 "$_BASE_URL/bin/graperoot" -o "$SCRIPT_DIR/graperoot" 2>/dev/null \
+    && chmod +x "$SCRIPT_DIR/graperoot" || true
+  curl -fsSL --max-time 15 "$_BASE_URL/bin/graperoot.cmd" -o "$SCRIPT_DIR/graperoot.cmd" 2>/dev/null || true
+  curl -fsSL --max-time 15 "$_BASE_URL/bin/graperoot.ps1" -o "$SCRIPT_DIR/graperoot.ps1" 2>/dev/null || true
   echo "$_REMOTE_VER" > "$SCRIPT_DIR/version.txt"
   # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
   if [[ -x "$VENV_BIN/pip" ]]; then
     "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null || true
   fi
+  # Show changelog for new version (max 3 lines)
+  _CHANGELOG="$(curl -sf --max-time 5 "$_BASE_URL/bin/changelog.txt" 2>/dev/null \
+    || curl -sf --max-time 5 "$_R2/changelog.txt" 2>/dev/null || true)"
+  if [[ -n "$_CHANGELOG" ]]; then
+    _NOTES="$(echo "$_CHANGELOG" | python3 -c "
+import sys
+lines = sys.stdin.read().splitlines()
+ver = None
+notes = []
+for line in lines:
+    if line.strip() == '$_REMOTE_VER':
+        ver = True
+        continue
+    if ver:
+        if line == '' and notes: break
+        if line.startswith('-'): notes.append(line.strip())
+        if len(notes) == 3: break
+for n in notes: print(n)
+" 2>/dev/null || true)"
+    if [[ -n "$_NOTES" ]]; then
+      echo "[$TOOL_LABEL] What's new in $_REMOTE_VER:"
+      while IFS= read -r _note; do
+        echo "[$TOOL_LABEL]   $_note"
+      done <<< "$_NOTES"
+    fi
+  fi
   echo "[$TOOL_LABEL] Updated to $_REMOTE_VER. Restarting..."
   EXEC_ARGS=("$SCRIPT_DIR/dual_graph_launch.sh" "$ASSISTANT" "$PROJECT")
+  [[ -n "$RESUME_ID" ]] && EXEC_ARGS+=("--resume" "$RESUME_ID")
   [[ -n "$PROMPT" ]] && EXEC_ARGS+=("$PROMPT")
   exec "${EXEC_ARGS[@]}"
 elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
   echo "[$TOOL_LABEL] Local version ($_LOCAL_VER) is newer than remote ($_REMOTE_VER); skipping downgrade."
+fi
+# ── Bootstrap graperoot if missing (users who installed before 3.9.13) ───────
+if [[ ! -x "$SCRIPT_DIR/graperoot" ]]; then
+  curl -fsSL --max-time 15 "$_BASE_URL/bin/graperoot" -o "$SCRIPT_DIR/graperoot" 2>/dev/null \
+    || curl -fsSL --max-time 15 "$_R2/graperoot" -o "$SCRIPT_DIR/graperoot" 2>/dev/null || true
+  [[ -f "$SCRIPT_DIR/graperoot" ]] && chmod +x "$SCRIPT_DIR/graperoot"
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -481,9 +507,15 @@ fi
 # ── Auto-install compiled graperoot package (falls back to .py if it fails) ──
 _GRAPEROOT_OK=0
 
-# Already installed — just verify import works
-if "$PYTHON" -c "import graperoot" 2>/dev/null; then
+# Already installed — verify graph_builder submodule is importable (not just graperoot)
+if "$PYTHON" -c "import graperoot.graph_builder" 2>/dev/null; then
   _GRAPEROOT_OK=1
+elif "$PYTHON" -c "import graperoot" 2>/dev/null; then
+  # graperoot imports but graph_builder submodule missing (broken sdist install) — upgrade
+  echo "[$TOOL_LABEL] graperoot.graph_builder missing — upgrading graperoot..."
+  if "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null; then
+    _GRAPEROOT_OK=1
+  fi
 else
   # Not installed yet — try pip install silently (first run only, ~5s)
   if "$VENV_BIN/pip" install graperoot --upgrade --quiet 2>/dev/null; then
@@ -741,14 +773,14 @@ Live dashboard URL is printed at startup next to "Token usage".
 
 ## Context Store
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to \`.dual-graph/context-store.json\`.
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call \`graph_add_memory\`.
 
-**Entry format:**
-\`\`\`json
-{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
+**To add an entry:**
+\`\`\`
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
 \`\`\`
 
-**To append:** Read the file → add the new entry to the array → Write it back → call \`graph_register_edit\` on \`.dual-graph/context-store.json\`.
+**Do NOT write context-store.json directly** — always use \`graph_add_memory\`. It applies pruning and keeps the store healthy.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)
@@ -775,6 +807,166 @@ _write_policy_doc() {
   fi
 }
 
+_append_claude_policy_doc() {
+  # Appends dgc policy to an existing CLAUDE.md, preserving user content above.
+  printf '\n' >> "$DOC_FILE"
+  cat >> "$DOC_FILE" << EOF
+<!-- $POLICY_MARKER -->
+# Dual-Graph Context Policy
+
+This project uses a local dual-graph MCP server for efficient context retrieval.
+
+## MANDATORY: Always follow this order
+
+1. **Call \`graph_continue\` first** — before any file exploration, grep, or code reading.
+
+2. **If \`graph_continue\` returns \`needs_project=true\`**: call \`graph_scan\` with the
+   current project directory (\`pwd\`). Do NOT ask the user.
+
+3. **If \`graph_continue\` returns \`skip=true\`**: project has fewer than 5 files.
+   Do NOT do broad or recursive exploration. Read only specific files if their names
+   are mentioned, or ask the user what to work on.
+
+4. **Read \`recommended_files\`** using \`graph_read\` — **one call per file**.
+   - \`graph_read\` accepts a single \`file\` parameter (string). Call it separately for each
+     recommended file. Do NOT pass an array or batch multiple files into one call.
+   - \`recommended_files\` may contain \`file::symbol\` entries (e.g. \`src/auth.ts::handleLogin\`).
+     Pass them verbatim to \`graph_read(file: "src/auth.ts::handleLogin")\` — it reads only
+     that symbol's lines, not the full file.
+   - Example: if \`recommended_files\` is \`["src/auth.ts::handleLogin", "src/db.ts"]\`,
+     call \`graph_read(file: "src/auth.ts::handleLogin")\` and \`graph_read(file: "src/db.ts")\`
+     as two separate calls (they can be parallel).
+
+5. **Check \`confidence\` and obey the caps strictly:**
+   - \`confidence=high\` -> Stop. Do NOT grep or explore further.
+   - \`confidence=medium\` -> If recommended files are insufficient, call \`fallback_rg\`
+     at most \`max_supplementary_greps\` time(s) with specific terms, then \`graph_read\`
+     at most \`max_supplementary_files\` additional file(s). Then stop.
+   - \`confidence=low\` -> Call \`fallback_rg\` at most \`max_supplementary_greps\` time(s),
+     then \`graph_read\` at most \`max_supplementary_files\` file(s). Then stop.
+
+## Token Usage
+
+A \`token-counter\` MCP is available for tracking live token usage.
+
+- To check how many tokens a large file or text will cost **before** reading it:
+  \`count_tokens({text: "<content>"})\`
+- To log actual usage after a task completes (if the user asks):
+  \`log_usage({input_tokens: <est>, output_tokens: <est>, description: "<task>"})\`
+- To show the user their running session cost:
+  \`get_session_stats()\`
+
+Live dashboard URL is printed at startup next to "Token usage".
+
+## Rules
+
+- Do NOT use \`rg\`, \`grep\`, or bash file exploration before calling \`graph_continue\`.
+- Do NOT do broad/recursive exploration at any confidence level.
+- \`max_supplementary_greps\` and \`max_supplementary_files\` are hard caps - never exceed them.
+- Do NOT dump full chat history.
+- Do NOT call \`graph_retrieve\` more than once per turn.
+- After edits, call \`graph_register_edit\` with the changed files. Use \`file::symbol\` notation (e.g. \`src/auth.ts::handleLogin\`) when the edit targets a specific function, class, or hook.
+
+## Context Store
+
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call \`graph_add_memory\`.
+
+**To add an entry:**
+\`\`\`
+graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
+\`\`\`
+
+**Do NOT write context-store.json directly** — always use \`graph_add_memory\`. It applies pruning and keeps the store healthy.
+
+**Rules:**
+- Only log things worth remembering across sessions (not every minor detail)
+- \`content\` must be under 15 words
+- \`files\` lists the files this decision/task relates to (can be empty)
+- Log immediately when the item arises — not at session end
+
+## Session End
+
+When the user signals they are done (e.g. "bye", "done", "wrap up", "end session"), proactively update \`CONTEXT.md\` in the project root with:
+- **Current Task**: one sentence on what was being worked on
+- **Key Decisions**: bullet list, max 3 items
+- **Next Steps**: bullet list, max 3 items
+
+Keep \`CONTEXT.md\` under 20 lines total. Do NOT summarize the full conversation — only what's needed to resume next session.
+EOF
+}
+
+_append_codex_policy_doc() {
+  printf '\n' >> "$DOC_FILE"
+  cat >> "$DOC_FILE" << EOF
+<!-- $POLICY_MARKER -->
+# Dual-Graph Context Policy
+
+This project uses a local dual-graph MCP server for efficient context retrieval.
+
+## Context Layering (Codex Only)
+
+- Use layered context files:
+  - \`.dual-graph-context/PROJECT_CONTEXT.md\` for stable project context.
+  - \`.dual-graph-context/SESSION_CONTEXT.md\` for current in-chat scope.
+  - \`.dual-graph-context/packs/*.md\` for domain-specific context packs.
+- Never ask for "full context" or entire chat history.
+- Ask only for missing sections, one short question at a time.
+- If a domain is missing context, request only that pack (for example: "please share billing context pack").
+
+## MANDATORY: Always follow this order
+
+1. **Call \`graph_continue\` first** — before any file exploration, grep, or code reading.
+
+2. **If \`graph_continue\` returns \`needs_project=true\`**: call \`graph_scan\` with the
+   current project directory (\`pwd\`). Do NOT ask the user.
+
+3. **If \`graph_continue\` returns \`skip=true\`**: project has fewer than 5 files.
+   Do NOT do broad or recursive exploration. Read only specific files if their names
+   are mentioned, or ask the user what to work on.
+
+4. **Load context layers before implementation decisions**:
+   - Read \`.dual-graph-context/PROJECT_CONTEXT.md\` and \`.dual-graph-context/SESSION_CONTEXT.md\` when available.
+   - Read only relevant \`.dual-graph-context/packs/*.md\` files for the current task.
+   - If critical context is missing, ask one scoped question and continue after answer.
+
+5. **Read \`recommended_files\`** using \`graph_read\` — **one call per file**.
+   - \`graph_read\` accepts a single \`file\` parameter (string). Call it separately for each
+     recommended file. Do NOT pass an array or batch multiple files into one call.
+   - \`recommended_files\` may contain \`file::symbol\` entries (e.g. \`src/auth.ts::handleLogin\`).
+     Pass them verbatim to \`graph_read(file: "src/auth.ts::handleLogin")\` — it reads only
+     that symbol's lines, not the full file.
+   - Example: if \`recommended_files\` is \`["src/auth.ts::handleLogin", "src/db.ts"]\`,
+     call \`graph_read(file: "src/auth.ts::handleLogin")\` and \`graph_read(file: "src/db.ts")\`
+     as two separate calls (they can be parallel).
+
+6. **Check \`confidence\` and obey the caps strictly:**
+   - \`confidence=high\` -> Stop. Do NOT grep or explore further.
+   - \`confidence=medium\` -> If recommended files are insufficient, call \`fallback_rg\`
+     at most \`max_supplementary_greps\` time(s) with specific terms, then \`graph_read\`
+     at most \`max_supplementary_files\` additional file(s). Then stop.
+   - \`confidence=low\` -> Call \`fallback_rg\` at most \`max_supplementary_greps\` time(s),
+     then \`graph_read\` at most \`max_supplementary_files\` file(s). Then stop.
+
+## Rules
+
+- Do NOT use \`rg\`, \`grep\`, or bash file exploration before calling \`graph_continue\`.
+- Do NOT do broad/recursive exploration at any confidence level.
+- \`max_supplementary_greps\` and \`max_supplementary_files\` are hard caps - never exceed them.
+- Do NOT dump full chat history.
+- Do context handshake per task: summarize known context, then ask for only missing pieces.
+- Do NOT call \`graph_retrieve\` more than once per turn.
+- After edits, call \`graph_register_edit\` with the changed files. Use \`file::symbol\` notation (e.g. \`src/auth.ts::handleLogin\`) when the edit targets a specific function, class, or hook.
+EOF
+}
+
+_append_policy_doc() {
+  if [[ "$ASSISTANT" == "codex" ]]; then
+    _append_codex_policy_doc
+  else
+    _append_claude_policy_doc
+  fi
+}
+
 _ensure_codex_context_files
 
 if [[ ! -f "$DOC_FILE" ]]; then
@@ -782,9 +974,42 @@ if [[ ! -f "$DOC_FILE" ]]; then
   _write_policy_doc
   echo "[$TOOL_LABEL] $DOC_NAME created."
 elif ! grep -q "$POLICY_MARKER" "$DOC_FILE"; then
-  echo "[$TOOL_LABEL] Upgrading $DOC_NAME to v10 policy ..."
-  _write_policy_doc
-  echo "[$TOOL_LABEL] $DOC_NAME upgraded."
+  # Check if an older policy version is present — if so, surgically patch Context Store section
+  if grep -q "dgc-policy-v" "$DOC_FILE"; then
+    echo "[$TOOL_LABEL] Patching $DOC_NAME Context Store section (v10 -> v11)..."
+    python3 - "$DOC_FILE" << 'PYEOF' 2>/dev/null || true
+import sys, re, pathlib
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old_section = re.search(
+    r'(## Context Store\n\nWhenever you make a decision.*?Log immediately when the item arises[^\n]*\n)',
+    text, re.DOTALL)
+if old_section:
+    new_section = (
+        "## Context Store\n\n"
+        "Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.\n\n"
+        "**To add an entry:**\n"
+        "```\n"
+        'graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])\n'
+        "```\n\n"
+        "**Do NOT write context-store.json directly** \u2014 always use `graph_add_memory`. It applies pruning and keeps the store healthy.\n\n"
+        "**Rules:**\n"
+        "- Only log things worth remembering across sessions (not every minor detail)\n"
+        "- `content` must be under 15 words\n"
+        "- `files` lists the files this decision/task relates to (can be empty)\n"
+        "- Log immediately when the item arises \u2014 not at session end\n"
+    )
+    text = text[:old_section.start()] + new_section + text[old_section.end():]
+# Bump policy marker
+text = re.sub(r'dgc-policy-v\d+', 'dgc-policy-v11', text)
+path.write_text(text, encoding="utf-8")
+PYEOF
+    echo "[$TOOL_LABEL] $DOC_NAME updated."
+  else
+    echo "[$TOOL_LABEL] Appending dual-graph policy to existing $DOC_NAME (your content is preserved)..."
+    _append_policy_doc
+    echo "[$TOOL_LABEL] $DOC_NAME updated."
+  fi
 else
   echo "[$TOOL_LABEL] $DOC_NAME already up to date, skipping."
 fi
@@ -1001,7 +1226,7 @@ STOPEOF
   PRIME_CMD="$DATA_DIR/prime.sh"
   # Write JSON via Python to avoid quoting/escaping issues in paths with spaces.
   "$PYTHON" - "$PROJECT/.claude/settings.local.json" "$PRIME_CMD" "$DATA_DIR/stop.sh" <<'PY'
-import json, sys, platform
+import json, sys, platform, os
 settings_file = sys.argv[1]
 prime_cmd = sys.argv[2]
 stop_cmd = sys.argv[3]
@@ -1009,19 +1234,32 @@ stop_cmd = sys.argv[3]
 bash = "bash" if platform.system() == "Windows" else "/bin/bash"
 hook_cmd = f'{bash} "{prime_cmd}"'
 stop_hook_cmd = f'{bash} "{stop_cmd}"'
-payload = {
-    "hooks": {
-        "SessionStart": [
-            {"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]}
-        ],
-        "PreCompact": [
-            {"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]}
-        ],
-        "Stop": [
-            {"matcher": "", "hooks": [{"type": "command", "command": stop_hook_cmd}]}
-        ],
-    }
+dgc_hooks = {
+    "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]}],
+    "PreCompact":   [{"matcher": "", "hooks": [{"type": "command", "command": hook_cmd}]}],
+    "Stop":         [{"matcher": "", "hooks": [{"type": "command", "command": stop_hook_cmd}]}],
 }
+# Read existing settings so we don't wipe user's permissions/other keys
+existing = {}
+if os.path.exists(settings_file):
+    try:
+        with open(settings_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+# Merge hooks: remove stale dgc entries, prepend fresh ones, keep user's other hooks
+existing_hooks = existing.get("hooks", {})
+merged_hooks = dict(existing_hooks)
+for hook_type, new_entries in dgc_hooks.items():
+    old = existing_hooks.get(hook_type, [])
+    # Strip out old dgc-managed entries (identified by prime/stop script paths)
+    kept = [e for e in old if not any(
+        "prime.sh" in h.get("command", "") or "stop.sh" in h.get("command", "") or
+        "prime.ps1" in h.get("command", "") or "stop_hook" in h.get("command", "")
+        for h in e.get("hooks", [])
+    )]
+    merged_hooks[hook_type] = new_entries + kept  # dgc hooks first for priority
+payload = {**existing, "hooks": merged_hooks}
 with open(settings_file, "w", encoding="utf-8") as f:
     json.dump(payload, f, indent=2)
     f.write("\n")
@@ -1093,7 +1331,7 @@ if [[ "$ASSISTANT" == "codex" ]]; then
     _send_cli_error "Registering MCP" "MCP registration failed after auto-fix (codex): $_CODEX_REG_ERR"
     exit 1
   fi
-else
+elif [[ "$ASSISTANT" == "claude" ]]; then
   CURRENT_STEP="Registering MCP"
 
   # Auto-install claude CLI if missing
@@ -1151,14 +1389,257 @@ else
   echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
 
   # ── Token Counter MCP (global user scope — works in all projects) ────────
+  # Kill any leftover token-counter-mcp process so it can reclaim port 8899
+  _TC_PORT_FILE="$HOME/.claude/token-counter/dashboard-port.txt"
+  if [[ -f "$_TC_PORT_FILE" ]]; then
+    _OLD_PORT=$(cat "$_TC_PORT_FILE")
+    lsof -ti tcp:"$_OLD_PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
+  fi
   claude mcp remove token-counter --scope user >/dev/null 2>&1 || true
   claude mcp remove token-counter >/dev/null 2>&1 || true
   claude mcp add --scope user token-counter -- npx -y token-counter-mcp >/dev/null 2>&1 || true
-  _TC_PORT_FILE="$HOME/.claude/token-counter/dashboard-port.txt"
   _TC_PORT=8899
   if [[ -f "$_TC_PORT_FILE" ]]; then _TC_PORT=$(cat "$_TC_PORT_FILE"); fi
   echo "[$TOOL_LABEL] Token counter -> http://localhost:$_TC_PORT (global)"
   # ───────────────────────────────────────────────────────────────────────────
+
+elif [[ "$ASSISTANT" == "cursor" ]]; then
+  CURRENT_STEP="Registering MCP (Cursor)"
+
+  # Locate cursor CLI — prefer PATH, fall back to known install locations per OS
+  CURSOR_BIN=""
+  if command -v cursor &>/dev/null; then
+    CURSOR_BIN="cursor"
+  else
+    for _candidate in \
+      "/Applications/Cursor.app/Contents/Resources/app/bin/cursor" \
+      "$HOME/Applications/Cursor.app/Contents/Resources/app/bin/cursor" \
+      "$HOME/.local/bin/cursor" \
+      "/usr/local/bin/cursor" \
+      "/usr/bin/cursor" \
+      "/opt/cursor/cursor" \
+      "/snap/bin/cursor"; do
+      if [[ -x "$_candidate" ]]; then
+        CURSOR_BIN="$_candidate"
+        echo "[$TOOL_LABEL] Found cursor at: $_candidate"
+        echo "[$TOOL_LABEL] Tip: add it to PATH permanently:"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          echo "[$TOOL_LABEL]   Open Cursor -> Cmd+Shift+P -> 'Install cursor command'"
+        else
+          echo "[$TOOL_LABEL]   Add $(dirname "$_candidate") to your PATH"
+        fi
+        break
+      fi
+    done
+  fi
+  if [[ -z "$CURSOR_BIN" ]]; then
+    echo "[$TOOL_LABEL] ERROR: Cursor not found."
+    echo "[$TOOL_LABEL]   Install from https://www.cursor.com"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      echo "[$TOOL_LABEL]   Then: Cmd+Shift+P -> 'Install cursor command'"
+    else
+      echo "[$TOOL_LABEL]   Then ensure 'cursor' is on your PATH"
+    fi
+    _send_cli_error "Registering MCP" "cursor CLI not found"
+    exit 1
+  fi
+
+  # Write MCP server entry into the project's .cursor/mcp.json
+  mkdir -p "$PROJECT/.cursor"
+  "$PYTHON" - "$PROJECT/.cursor/mcp.json" "$MCP_PORT" <<'PY'
+import json, sys, os
+config_file = sys.argv[1]
+port = sys.argv[2]
+existing = {}
+if os.path.exists(config_file):
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+servers = existing.get("mcpServers", {})
+servers["dual-graph"] = {"url": f"http://localhost:{port}/mcp"}
+existing["mcpServers"] = servers
+with open(config_file, "w", encoding="utf-8") as f:
+    json.dump(existing, f, indent=2)
+    f.write("\n")
+PY
+  echo "[$TOOL_LABEL] MCP config written -> $PROJECT/.cursor/mcp.json"
+  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL]"
+  echo "[$TOOL_LABEL] NOTE: activate dual-graph in Cursor (one-time setup):"
+  echo "[$TOOL_LABEL]   Cursor Settings -> Tools & MCP -> enable 'dual-graph'"
+
+elif [[ "$ASSISTANT" == "gemini" ]]; then
+  CURRENT_STEP="Registering MCP (Gemini)"
+
+  # Auto-install gemini CLI if missing
+  if ! command -v gemini &>/dev/null; then
+    echo "[$TOOL_LABEL] gemini CLI not found — installing..."
+    if command -v npm &>/dev/null; then
+      npm install -g @google/gemini-cli >/dev/null 2>&1 || true
+    fi
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+    if ! command -v gemini &>/dev/null; then
+      echo "[$TOOL_LABEL] ERROR: could not auto-install gemini CLI."
+      echo "[$TOOL_LABEL]   npm install -g @google/gemini-cli"
+      _send_cli_error "Registering MCP" "gemini CLI not found, auto-install failed"
+      exit 1
+    fi
+    echo "[$TOOL_LABEL] gemini CLI installed."
+  fi
+
+  # Write MCP server entry into ~/.gemini/settings.json
+  mkdir -p "$HOME/.gemini"
+  "$PYTHON" - "$HOME/.gemini/settings.json" "$MCP_PORT" <<'PY'
+import json, sys, os
+config_file = sys.argv[1]
+port = sys.argv[2]
+existing = {}
+if os.path.exists(config_file):
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+servers = existing.get("mcpServers", {})
+servers["dual-graph"] = {"httpUrl": f"http://localhost:{port}/mcp"}
+existing["mcpServers"] = servers
+with open(config_file, "w", encoding="utf-8") as f:
+    json.dump(existing, f, indent=2)
+    f.write("\n")
+PY
+  echo "[$TOOL_LABEL] MCP config written -> $HOME/.gemini/settings.json"
+  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+
+elif [[ "$ASSISTANT" == "opencode" ]]; then
+  CURRENT_STEP="Registering MCP (OpenCode)"
+
+  # Auto-install opencode CLI if missing
+  if ! command -v opencode &>/dev/null; then
+    echo "[$TOOL_LABEL] opencode not found — installing..."
+    if command -v npm &>/dev/null; then
+      npm install -g opencode-ai >/dev/null 2>&1 || true
+    fi
+    export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+    if ! command -v opencode &>/dev/null; then
+      echo "[$TOOL_LABEL] ERROR: could not auto-install opencode."
+      echo "[$TOOL_LABEL]   npm install -g opencode-ai"
+      echo "[$TOOL_LABEL]   or: curl -fsSL https://opencode.ai/install | bash"
+      _send_cli_error "Registering MCP" "opencode CLI not found, auto-install failed"
+      exit 1
+    fi
+    echo "[$TOOL_LABEL] opencode installed."
+  fi
+
+  # Write MCP server entry into project-level opencode.json
+  "$PYTHON" - "$PROJECT/opencode.json" "$MCP_PORT" <<'PY'
+import json, sys, os
+config_file = sys.argv[1]
+port = sys.argv[2]
+existing = {}
+if os.path.exists(config_file):
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+if "$schema" not in existing:
+    existing["$schema"] = "https://opencode.ai/config.json"
+mcp = existing.get("mcp", {})
+mcp["dual-graph"] = {"type": "remote", "url": f"http://localhost:{port}/mcp", "enabled": True}
+existing["mcp"] = mcp
+with open(config_file, "w", encoding="utf-8") as f:
+    json.dump(existing, f, indent=2)
+    f.write("\n")
+PY
+  echo "[$TOOL_LABEL] MCP config written -> $PROJECT/opencode.json"
+  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+
+elif [[ "$ASSISTANT" == "copilot" ]]; then
+  CURRENT_STEP="Registering MCP (Copilot / VS Code)"
+
+  # Locate VS Code CLI
+  CODE_BIN=""
+  if command -v code &>/dev/null; then
+    CODE_BIN="code"
+  else
+    for _candidate in \
+      "/usr/local/bin/code" \
+      "/usr/bin/code" \
+      "$HOME/.local/bin/code" \
+      "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
+      "$HOME/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" \
+      "/snap/bin/code"; do
+      if [[ -x "$_candidate" ]]; then
+        CODE_BIN="$_candidate"
+        echo "[$TOOL_LABEL] Found VS Code at: $_candidate"
+        break
+      fi
+    done
+  fi
+  if [[ -z "$CODE_BIN" ]]; then
+    echo "[$TOOL_LABEL] ERROR: VS Code CLI ('code') not found."
+    echo "[$TOOL_LABEL]   Install from https://code.visualstudio.com"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      echo "[$TOOL_LABEL]   Then: Cmd+Shift+P -> 'Shell Command: Install code command'"
+    else
+      echo "[$TOOL_LABEL]   Then ensure 'code' is on your PATH"
+    fi
+    _send_cli_error "Registering MCP" "VS Code CLI not found"
+    exit 1
+  fi
+
+  # Write MCP server entry into .vscode/mcp.json
+  mkdir -p "$PROJECT/.vscode"
+  "$PYTHON" - "$PROJECT/.vscode/mcp.json" "$MCP_PORT" <<'PY'
+import json, sys, os
+config_file = sys.argv[1]
+port = sys.argv[2]
+existing = {}
+if os.path.exists(config_file):
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+servers = existing.get("servers", {})
+servers["dual-graph"] = {"type": "http", "url": f"http://localhost:{port}/mcp"}
+existing["servers"] = servers
+with open(config_file, "w", encoding="utf-8") as f:
+    json.dump(existing, f, indent=2)
+    f.write("\n")
+PY
+  echo "[$TOOL_LABEL] MCP config written -> $PROJECT/.vscode/mcp.json"
+  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL]"
+  echo "[$TOOL_LABEL] NOTE: enable dual-graph in VS Code (one-time setup):"
+  echo "[$TOOL_LABEL]   Copilot Chat panel -> Agent mode -> enable 'dual-graph'"
+fi
+
+# ── First-run: show all available commands ────────────────────────────────────
+_INSTALL_DATE_FILE="$SCRIPT_DIR/install_date.txt"
+if [[ ! -f "$_INSTALL_DATE_FILE" ]]; then
+  date +%Y-%m-%d > "$_INSTALL_DATE_FILE" 2>/dev/null || true
+  echo ""
+  echo "======================================================"
+  echo "  Graperoot installed! Available commands:"
+  echo "======================================================"
+  echo ""
+  echo "  graperoot [path] --claude    Claude Code"
+  echo "  graperoot [path] --codex     OpenAI Codex"
+  echo "  graperoot [path] --cursor    Cursor IDE"
+  echo "  graperoot [path] --gemini    Google Gemini CLI"
+  echo "  graperoot [path] --opencode  OpenCode"
+  echo "  graperoot [path] --copilot   GitHub Copilot (VS Code)"
+  echo ""
+  echo "  Shortcuts:"
+  echo "    dgc [path]   →  graperoot [path] --claude"
+  echo "    dg  [path]   →  graperoot [path] --codex"
+  echo ""
+  echo "  graperoot --help   show full usage"
+  echo "======================================================"
+  echo ""
 fi
 
 # ── One-time feedback form ─────────────────────────────────────────────────────
@@ -1206,16 +1687,18 @@ fi
 CURRENT_STEP="Pre-flight checks"
 
 # 1. Verify the CLI tool is installed and in PATH (should already be fixed at registration step, but double-check)
-if ! command -v "$ASSISTANT" &>/dev/null; then
+# For cursor/copilot, bin was resolved at registration; skip the PATH check.
+if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" ]] && ! command -v "$ASSISTANT" &>/dev/null; then
   # Refresh PATH one more time
   export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
   if ! command -v "$ASSISTANT" &>/dev/null; then
     echo "[$TOOL_LABEL] ERROR: '$ASSISTANT' CLI not found in PATH."
-    if [[ "$ASSISTANT" == "claude" ]]; then
-      echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code"
-    else
-      echo "[$TOOL_LABEL]   npm install -g @openai/codex"
-    fi
+    case "$ASSISTANT" in
+      claude) echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code" ;;
+      codex)  echo "[$TOOL_LABEL]   npm install -g @openai/codex" ;;
+      gemini)   echo "[$TOOL_LABEL]   npm install -g @google/gemini-cli" ;;
+      opencode) echo "[$TOOL_LABEL]   npm install -g opencode-ai  (or: curl -fsSL https://opencode.ai/install | bash)" ;;
+    esac
     _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found after auto-install"
     exit 1
   fi
@@ -1235,17 +1718,24 @@ if command -v node &>/dev/null; then
 fi
 
 # 3. Quick smoke test — verify CLI responds (catches broken installs, missing deps)
-if ! "$ASSISTANT" --version &>/dev/null 2>&1; then
+# cursor is validated via CURSOR_BIN at registration time; skip --version check for it.
+_SMOKE_BIN="${CURSOR_BIN:-${CODE_BIN:-$ASSISTANT}}"
+if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" ]] && ! "$_SMOKE_BIN" --version &>/dev/null 2>&1; then
   echo "[$TOOL_LABEL] WARNING: '$ASSISTANT --version' failed. The CLI may not work correctly."
-  echo "[$TOOL_LABEL] Try reinstalling: npm install -g @anthropic-ai/claude-code"
+  case "$ASSISTANT" in
+    claude)   echo "[$TOOL_LABEL] Try reinstalling: npm install -g @anthropic-ai/claude-code" ;;
+    codex)    echo "[$TOOL_LABEL] Try reinstalling: npm install -g @openai/codex" ;;
+    gemini)   echo "[$TOOL_LABEL] Try reinstalling: npm install -g @google/gemini-cli" ;;
+    opencode) echo "[$TOOL_LABEL] Try reinstalling: npm install -g opencode" ;;
+  esac
 fi
 
 # 4. Verify MCP server is still alive (it may have crashed between startup and now)
 if ! kill -0 "$MCP_PID" 2>/dev/null; then
-  echo "[$TOOL_LABEL] ERROR: MCP server (PID $MCP_PID) died before Claude started."
+  echo "[$TOOL_LABEL] ERROR: MCP server (PID $MCP_PID) died before $ASSISTANT started."
   _MCP_LOG_TAIL="$(tail -n 20 "$DATA_DIR/mcp_server.log" 2>/dev/null | tr '\n' ' ' | cut -c1-500)"
   echo "[$TOOL_LABEL] Last log: $_MCP_LOG_TAIL"
-  echo "[$TOOL_LABEL] Try running dgc again. If it persists, join Discord: https://discord.gg/rxgVVgCh"
+  echo "[$TOOL_LABEL] Try running $TOOL_LABEL again. If it persists, join Discord: https://discord.gg/rxgVVgCh"
   _send_cli_error "Pre-flight checks" "MCP server died before Claude started: $_MCP_LOG_TAIL"
   exit 1
 fi
@@ -1260,18 +1750,74 @@ cd "$PROJECT" || {
   _send_cli_error "Changing to project directory" "Cannot cd to project: $PROJECT"
   exit 1
 }
-CURRENT_STEP="Running Claude"
+CURRENT_STEP="Running $ASSISTANT"
 # Disable ERR trap — some bash versions (esp. Linux) fire ERR despite set +e,
 # causing spurious "Unhandled launcher failure" telemetry.
 trap - ERR
 set +e
-if [[ -n "$PROMPT" ]]; then
+if [[ "$ASSISTANT" == "cursor" ]]; then
+  # Cursor is an IDE — open project and keep MCP server alive until Ctrl+C.
+  echo "[$TOOL_LABEL] MCP server running on port $MCP_PORT"
+  echo "[$TOOL_LABEL]"
+  echo "[$TOOL_LABEL] To activate dual-graph in Cursor (one-time setup):"
+  echo "[$TOOL_LABEL]   Cursor Settings -> Tools & MCP -> enable 'dual-graph'"
+  echo "[$TOOL_LABEL]   Then reload Cursor — dual-graph will connect automatically."
+  echo "[$TOOL_LABEL]"
+  echo "[$TOOL_LABEL] Opening project in Cursor..."
+  "$CURSOR_BIN" "$PROJECT" 2>"$DATA_DIR/assistant_stderr.log" &
+  echo "[$TOOL_LABEL] Press Ctrl+C to stop the MCP server when you are done."
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"; exit 0' INT TERM HUP
+  while true; do sleep 5 & wait $!; done
+elif [[ "$ASSISTANT" == "copilot" ]]; then
+  # VS Code is an IDE — open project and keep MCP server alive until Ctrl+C.
+  echo "[$TOOL_LABEL] MCP server running on port $MCP_PORT"
+  echo "[$TOOL_LABEL]"
+  echo "[$TOOL_LABEL] To activate dual-graph in VS Code (one-time setup):"
+  echo "[$TOOL_LABEL]   Copilot Chat panel -> Agent mode -> enable 'dual-graph'"
+  echo "[$TOOL_LABEL]   Then reload VS Code — dual-graph will connect automatically."
+  echo "[$TOOL_LABEL]"
+  echo "[$TOOL_LABEL] Opening project in VS Code..."
+  "$CODE_BIN" "$PROJECT" 2>"$DATA_DIR/assistant_stderr.log" &
+  echo "[$TOOL_LABEL] Press Ctrl+C to stop the MCP server when you are done."
+  trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$DATA_DIR/mcp_server.pid" "$DATA_DIR/mcp_port"; exit 0' INT TERM HUP
+  while true; do sleep 5 & wait $!; done
+elif [[ -n "$RESUME_ID" ]]; then
+  "$ASSISTANT" --resume "$RESUME_ID" 2>"$DATA_DIR/assistant_stderr.log"
+elif [[ -n "$PROMPT" ]]; then
   "$ASSISTANT" "$PROMPT" 2>"$DATA_DIR/assistant_stderr.log"
 else
   "$ASSISTANT" 2>"$DATA_DIR/assistant_stderr.log"
 fi
 ASSISTANT_EXIT=$?
 set -e
+
+# Show resume hint with actual session ID
+if [[ "$ASSISTANT" == "claude" ]]; then
+  _LAST_SESSION="$(python3 - "$HOME/.claude/history.jsonl" "$PROJECT" <<'PY'
+import sys, json, os
+from pathlib import Path
+history_file = Path(sys.argv[1])
+project = os.path.realpath(sys.argv[2]).rstrip("/")
+if not history_file.exists():
+    sys.exit(0)
+last_id = ""
+for line in history_file.read_text(encoding="utf-8").splitlines():
+    try:
+        d = json.loads(line)
+        entry = os.path.realpath(d.get("project", "")).rstrip("/")
+        if entry.lower() == project.lower() and d.get("sessionId"):
+            last_id = d["sessionId"]
+    except Exception:
+        pass
+print(last_id)
+PY
+  2>/dev/null || true)"
+  if [[ -n "$_LAST_SESSION" ]]; then
+    echo ""
+    echo "[$TOOL_LABEL] To resume this session with dual-graph:"
+    echo "[$TOOL_LABEL]   dgc --resume \"$_LAST_SESSION\""
+  fi
+fi
 
 # Ignore normal termination: 0=clean, 130=SIGINT (Ctrl+C), 143=SIGTERM
 if [[ "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" -ne 143 ]]; then
@@ -1282,13 +1828,16 @@ if [[ "$ASSISTANT_EXIT" -ne 0 && "$ASSISTANT_EXIT" -ne 130 && "$ASSISTANT_EXIT" 
     echo "[$TOOL_LABEL] Error output: $_STDERR_TAIL"
   fi
   echo "[$TOOL_LABEL] Troubleshooting:"
-  if [[ "$ASSISTANT" == "claude" ]]; then
-    echo "[$TOOL_LABEL]   1. Update Claude Code: npm install -g @anthropic-ai/claude-code"
-  else
-    echo "[$TOOL_LABEL]   1. Update Codex: npm install -g @openai/codex"
-  fi
+  case "$ASSISTANT" in
+    claude)   echo "[$TOOL_LABEL]   1. Update Claude Code: npm install -g @anthropic-ai/claude-code" ;;
+    codex)    echo "[$TOOL_LABEL]   1. Update Codex: npm install -g @openai/codex" ;;
+    cursor)   echo "[$TOOL_LABEL]   1. Reinstall Cursor from https://www.cursor.com" ;;
+    gemini)   echo "[$TOOL_LABEL]   1. Update Gemini CLI: npm install -g @google/gemini-cli" ;;
+    opencode) echo "[$TOOL_LABEL]   1. Update OpenCode: npm install -g opencode" ;;
+    copilot)  echo "[$TOOL_LABEL]   1. Reinstall VS Code from https://code.visualstudio.com" ;;
+  esac
   echo "[$TOOL_LABEL]   2. Try running '$ASSISTANT' directly to see if it works"
-  echo "[$TOOL_LABEL]   3. Run dgc again — it may be a transient issue"
+  echo "[$TOOL_LABEL]   3. Run $TOOL_LABEL again — it may be a transient issue"
   echo "[$TOOL_LABEL]   4. Join Discord for help: https://discord.gg/rxgVVgCh"
   _send_cli_error "Running $ASSISTANT" "$ASSISTANT exited=$ASSISTANT_EXIT stderr=$_STDERR_TAIL"
 fi

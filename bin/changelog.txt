@@ -1,0 +1,113 @@
+3.9.31
+- Fixed: graperoot --opencode auto-install used wrong npm package; correct package is opencode-ai (works on Mac, Linux, and Windows)
+
+3.9.30
+- Fixed: bash graperoot launcher missing --opencode and --copilot flags (macOS/Linux)
+
+3.9.29
+- Added: graperoot --opencode support (writes project opencode.json, launches opencode TUI)
+- Added: graperoot --copilot support (writes .vscode/mcp.json, opens VS Code)
+
+3.9.28
+- Fixed: MCP server crash on Windows — removed `from __future__ import annotations`; string annotations bypassed mcp's get_origin guard causing issubclass() TypeError
+
+3.9.27
+- Fixed: MCP server crash on Windows — added `from __future__ import annotations` to fix TypeError: issubclass() arg 1 must be a class with older mcp library versions
+
+3.9.26
+- Fixed: context-store.json bloat — per-bucket pruning allowed unbounded growth across many files; added global per-type caps (decision:20, fact:20, task/next/blocker:10) and lowered total cap 200→150
+- Fixed: graph_add_memory entries used "type" key instead of "kind", bypassing pruning buckets on first write
+
+3.9.25
+- Fixed: graph_add_memory missing from PyPI package (src/graperoot/mcp_graph_server.py was stale)
+
+3.9.24
+- Fixed: PyPI wheel was Python 3.14-only (Cython in build-deps); now universal py3-none-any wheel
+
+3.9.23
+- Fixed: mcp_graph_server.py never updated on auto-update (missing from update list)
+
+3.9.22
+- Fixed: graperoot restart after auto-update crashed (@(expr) passes array not splat in PowerShell)
+
+3.9.21
+- Fixed: graperoot --cursor MCP config written empty on first run (Hashtable vs PSCustomObject bug)
+
+3.9.20
+- Fixed: graperoot scan always failed on Windows (graph_builder.exe passed to Python instead of run directly)
+- Fixed: graperoot MCP server healthcheck always timed out (HTTP / 404 -> use TCP connect instead)
+- Fixed: ErrorActionPreference Stop caused silent crashes in graperoot.ps1
+
+3.9.19
+- Fixed: graperoot --cursor/--gemini on Windows: mcp_graph_server.py not found in ~/.dual-graph
+
+3.9.18
+- Fixed: graperoot --cursor/--gemini crash on Windows (Start-Process same stdout/stderr file)
+- Fixed: graperoot unknown flag (e.g. --code) no longer treated as project path
+
+3.9.17
+- Fixed: graperoot command not found on Mac/Linux after upgrading from pre-3.9.13 install
+- Fixed: context-store.json bloat — new graph_add_memory MCP tool with auto-prune; in-memory cache
+- Fixed: CLAUDE.md Context Store instruction now uses graph_add_memory (stops unbounded file growth)
+- Fixed: dgc upgrade surgically patches Context Store section only (v10→v11), preserves user edits
+
+3.9.16
+- Fixed: graperoot.ps1 double-BOM causing "assignment expression not valid" on Windows
+
+3.9.15
+- Fixed: graperoot.ps1 parse error on Windows (UTF-8 BOM + CRLF + remove em-dash)
+
+3.9.14
+- Fixed: graperoot --cursor Ctrl+C now exits cleanly on first press (macOS/Linux)
+- Fixed: dgc.cmd/dg.cmd now always bootstrap graperoot.cmd+ps1 with R2 fallback
+- Fixed: removed version.txt pre-download from .cmd so PS1 update block fires correctly
+
+3.9.13
+- Fixed: install.ps1 and install.sh now download graperoot command on fresh install
+- Fixed: Windows users can now use graperoot --cursor / --gemini after reinstall
+
+3.9.12
+- Added: graperoot command — launch Claude, Codex, Cursor, or Gemini with dual-graph context
+- Added: graperoot --help, auto-update for all tools, first-run command guide
+- Added: Cursor IDE support with MCP config auto-write and Gemini CLI auto-install
+
+3.9.11
+- Fixed: dgc --resume now works on Windows PowerShell (double-dash flag parsing)
+3.9.10
+- Removed: error telemetry — install and launcher errors are no longer reported to the server
+- Fixed: token counter always shows correct port 8899 (stale port file no longer read)
+- Fixed: old token-counter-mcp stopped gracefully (SIGTERM) instead of force-killed
+
+3.9.8
+- Fixed: running dg and dgc together no longer kills each other's MCP server
+
+3.9.7
+- Fixed: settings.local.json now merges instead of overwriting (preserves user permissions/hooks)
+- Fixed: dgc --resume now works on Windows; resume hint shown at end of session
+
+3.9.6
+- Fixed: dgc now appends policy to existing CLAUDE.md instead of overwriting it (macOS, Linux, Windows)
+
+3.9.5
+- Fixed: token counter dashboard always reclaims port 8899 (macOS, Linux, Windows)
+
+3.9.4
+- Added: Unreal Engine 5 support (UCLASS, USTRUCT, UFUNCTION, UENUM macros) in graph_builder
+- Fixed: dgc not found on macOS bash — install.sh now writes to ~/.bash_profile
+
+3.9.3
+- Fixed: dgc no longer hangs on Cloudflare-blocked ISPs (Turkey etc) — CLAUDE.md uses hardcoded fallback
+- Added: C and C++ language support (.c .cpp .h .hpp) in graph_builder
+- Fixed: session resume hint now handles case-insensitive project paths (macOS)
+
+3.9.2
+- Fixed: dgc no longer hangs on VPN during self-update
+- Added: dgc --resume SESSION_ID to resume sessions with dual-graph active
+- Session resume hint shown automatically at end of each session
+
+3.9.1
+- Fixed: self-update download no longer hangs indefinitely on slow connections
+- Added --max-time 30 to update curl calls
+
+3.9.0
+- Added Rust, Java, C#, Ruby, PHP, Kotlin language support to graph_builder
