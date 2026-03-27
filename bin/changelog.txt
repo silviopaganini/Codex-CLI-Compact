@@ -1,3 +1,6 @@
+3.9.27
+- Fixed: MCP server crash on Windows — added `from __future__ import annotations` to fix TypeError: issubclass() arg 1 must be a class with older mcp library versions
+
 3.9.26
 - Fixed: context-store.json bloat — per-bucket pruning allowed unbounded growth across many files; added global per-type caps (decision:20, fact:20, task/next/blocker:10) and lowered total cap 200→150
 - Fixed: graph_add_memory entries used "type" key instead of "kind", bypassing pruning buckets on first write
