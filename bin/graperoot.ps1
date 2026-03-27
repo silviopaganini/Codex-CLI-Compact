@@ -374,10 +374,10 @@ if ($Assistant -eq "opencode") {
     # Auto-install opencode if missing
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
         Write-Host "[$Tool] opencode not found - installing..."
-        try { npm install -g opencode 2>&1 | Out-Null } catch {}
+        try { npm install -g opencode-ai 2>&1 | Out-Null } catch {}
         if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
             Write-Host "[$Tool] ERROR: could not auto-install opencode."
-            Write-Host "[$Tool]   npm install -g opencode"
+            Write-Host "[$Tool]   npm install -g opencode-ai"
             Stop-Process -Id $mcpProc.Id -Force -ErrorAction SilentlyContinue
             exit 1
         }

@@ -1,3 +1,6 @@
+3.9.31
+- Fixed: graperoot --opencode auto-install used wrong npm package; correct package is opencode-ai (works on Mac, Linux, and Windows)
+
 3.9.30
 - Fixed: bash graperoot launcher missing --opencode and --copilot flags (macOS/Linux)
 

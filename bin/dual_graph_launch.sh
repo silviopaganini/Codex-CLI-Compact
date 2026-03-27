@@ -71,7 +71,7 @@ case "$ASSISTANT" in
     ;;
   opencode)
     echo "[$TOOL_LABEL]   1. Wait 5 minutes and run graperoot again"
-    echo "[$TOOL_LABEL]   2. Update OpenCode: npm install -g opencode"
+    echo "[$TOOL_LABEL]   2. Install OpenCode: npm install -g opencode-ai"
     ;;
   copilot)
     echo "[$TOOL_LABEL]   1. Wait 5 minutes and run graperoot again"
@@ -1517,14 +1517,15 @@ elif [[ "$ASSISTANT" == "opencode" ]]; then
 
   # Auto-install opencode CLI if missing
   if ! command -v opencode &>/dev/null; then
-    echo "[$TOOL_LABEL] opencode CLI not found — installing..."
+    echo "[$TOOL_LABEL] opencode not found — installing..."
     if command -v npm &>/dev/null; then
-      npm install -g opencode >/dev/null 2>&1 || true
+      npm install -g opencode-ai >/dev/null 2>&1 || true
     fi
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
     if ! command -v opencode &>/dev/null; then
       echo "[$TOOL_LABEL] ERROR: could not auto-install opencode."
-      echo "[$TOOL_LABEL]   npm install -g opencode"
+      echo "[$TOOL_LABEL]   npm install -g opencode-ai"
+      echo "[$TOOL_LABEL]   or: curl -fsSL https://opencode.ai/install | bash"
       _send_cli_error "Registering MCP" "opencode CLI not found, auto-install failed"
       exit 1
     fi
@@ -1696,7 +1697,7 @@ if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" ]] && ! command -v "
       claude) echo "[$TOOL_LABEL]   npm install -g @anthropic-ai/claude-code" ;;
       codex)  echo "[$TOOL_LABEL]   npm install -g @openai/codex" ;;
       gemini)   echo "[$TOOL_LABEL]   npm install -g @google/gemini-cli" ;;
-      opencode) echo "[$TOOL_LABEL]   npm install -g opencode" ;;
+      opencode) echo "[$TOOL_LABEL]   npm install -g opencode-ai  (or: curl -fsSL https://opencode.ai/install | bash)" ;;
     esac
     _send_cli_error "Pre-flight checks" "$ASSISTANT CLI not found after auto-install"
     exit 1
