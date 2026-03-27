@@ -1,3 +1,9 @@
+3.9.33
+- Fixed: Mac/Linux dual_graph_launch.sh now accepts --flag style args (--claude, --opencode, etc.)
+- Added: Mac/Linux --opencode support (writes project opencode.json, launches opencode TUI)
+- Added: Mac/Linux --copilot support (writes .vscode/mcp.json, opens VS Code, keeps MCP alive)
+- Fixed: Windows --copilot writes .vscode/mcp.json via Python stdin (clean indent=2 JSON)
+
 3.9.31
 - Fixed: graperoot --opencode auto-install used wrong npm package; correct package is opencode-ai (works on Mac, Linux, and Windows)
 
