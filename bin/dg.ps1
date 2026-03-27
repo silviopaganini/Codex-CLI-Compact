@@ -527,12 +527,12 @@ try {
     }
 
     Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
-    $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp")
+    $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp", "--allow-http")
     # Fallback: try global mcp-remote
     if ($mcpAddExit -ne 0) {
         $mcpRemoteCmd = (Get-Command mcp-remote -ErrorAction SilentlyContinue).Source
         if ($mcpRemoteCmd) {
-            $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $mcpRemoteCmd, "http://localhost:$port/mcp")
+            $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $mcpRemoteCmd, "http://localhost:$port/mcp", "--allow-http")
         }
     }
     # Auto-fix: reinstall deps and retry
@@ -540,7 +540,7 @@ try {
         Write-Host "[$Tool] MCP registration failed -- reinstalling deps and retrying..."
         Invoke-NativeQuiet "npm" @("install", "-g", "@openai/codex", "mcp-remote") | Out-Null
         Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
-        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp")
+        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp", "--allow-http")
     }
     if ($mcpAddExit -ne 0) {
         Stop-McpServer $pidFile $portFile

@@ -333,9 +333,9 @@ if ($Assistant -eq "cursor") {
 if ($Assistant -eq "gemini") {
     # Auto-install gemini CLI if missing
     if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) {
-        Write-Host "[$Tool] gemini CLI not found - installing..."
+        Write-Host "[$Tool] gemini CLI not found - installing (this may take a minute)..."
         try {
-            npm install -g "@google/gemini-cli" 2>&1 | Out-Null
+            npm install -g "@google/gemini-cli"
         } catch {}
         if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) {
             Write-Host "[$Tool] ERROR: could not auto-install gemini CLI."
@@ -357,7 +357,15 @@ if ($Assistant -eq "gemini") {
     if (-not $existing.mcpServers) { $existing | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue @{} -Force }
     $existing.mcpServers | Add-Member -NotePropertyName "dual-graph" `
         -NotePropertyValue @{ httpUrl = "http://localhost:$McpPort/mcp" } -Force
-    $existing | ConvertTo-Json -Depth 5 | Set-Content -Path $GeminiConf -Encoding UTF8
+    $gemJsonCompact = $existing | ConvertTo-Json -Depth 5 -Compress
+    $gemPyScript = @'
+import json, sys
+data = json.load(sys.stdin)
+with open(sys.argv[1], 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+'@
+    $gemJsonCompact | & $Python -c $gemPyScript $GeminiConf
 
     Write-Host "[$Tool] MCP config written -> $GeminiConf"
     Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
@@ -373,11 +381,11 @@ if ($Assistant -eq "gemini") {
 if ($Assistant -eq "opencode") {
     # Auto-install opencode if missing
     if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
-        Write-Host "[$Tool] opencode not found - installing..."
-        try { npm install -g opencode 2>&1 | Out-Null } catch {}
+        Write-Host "[$Tool] opencode not found - installing (this may take a minute)..."
+        try { npm install -g opencode-ai } catch {}
         if (-not (Get-Command opencode -ErrorAction SilentlyContinue)) {
             Write-Host "[$Tool] ERROR: could not auto-install opencode."
-            Write-Host "[$Tool]   npm install -g opencode"
+            Write-Host "[$Tool]   npm install -g opencode-ai"
             Stop-Process -Id $mcpProc.Id -Force -ErrorAction SilentlyContinue
             exit 1
         }

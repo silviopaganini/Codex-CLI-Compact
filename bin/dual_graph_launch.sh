@@ -1302,9 +1302,9 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   _CODEX_REG_OK=0
   _CODEX_REG_ERR=""
   # Try npx first, then global mcp-remote
-  if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+  if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
     _CODEX_REG_OK=1
-  elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+  elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
     _CODEX_REG_OK=1
   fi
 
@@ -1314,9 +1314,9 @@ if [[ "$ASSISTANT" == "codex" ]]; then
     npm install -g @openai/codex mcp-remote >/dev/null 2>&1 || true
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
     codex mcp remove dual-graph >/dev/null 2>&1 || true
-    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
       _CODEX_REG_OK=1
-    elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
       _CODEX_REG_OK=1
     fi
   fi

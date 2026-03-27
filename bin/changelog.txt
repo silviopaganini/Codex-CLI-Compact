@@ -1,8 +1,17 @@
+3.9.34
+- Fixed: graperoot --gemini on Windows wrote settings.json with UTF-8 BOM causing invalid JSON error; now written via Python (no BOM)
+- Fixed: graperoot --gemini / --opencode on Windows now show live install progress (was silently piped to Out-Null, looked frozen)
+- Fixed: graperoot --codex MCP tools empty — mcp-remote 0.1.x requires --allow-http for localhost (Mac/Linux and Windows)
+- Fixed: pip install graperoot on Windows created dg.exe conflicting with dg.cmd launcher; renamed internal entry point to dg-graph
+
 3.9.33
 - Fixed: Mac/Linux dual_graph_launch.sh now accepts --flag style args (--claude, --opencode, etc.)
 - Added: Mac/Linux --opencode support (writes project opencode.json, launches opencode TUI)
 - Added: Mac/Linux --copilot support (writes .vscode/mcp.json, opens VS Code, keeps MCP alive)
 - Fixed: Windows --copilot writes .vscode/mcp.json via Python stdin (clean indent=2 JSON)
+
+3.9.32
+- Fixed: opencode.json invalid JSON from ConvertTo-Json alignment spaces; now uses Python json.dump
 
 3.9.31
 - Fixed: graperoot --opencode auto-install used wrong npm package; correct package is opencode-ai (works on Mac, Linux, and Windows)
