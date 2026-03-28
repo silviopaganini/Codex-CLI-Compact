@@ -528,6 +528,29 @@ try {
         }
     }
 
+    # ripgrep (rg) is required by the fallback_rg MCP tool — install if missing
+    if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
+        Write-Host "[$Tool] Installing ripgrep (required for code search)..."
+        $rgInstalled = $false
+        try {
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                $exit = Invoke-NativeQuiet "winget" @("install", "--id", "BurntSushi.ripgrep.MSVC", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+                if ($exit -eq 0) { $rgInstalled = $true }
+            }
+            if (-not $rgInstalled -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+                $exit = Invoke-NativeQuiet "choco" @("install", "ripgrep", "-y")
+                if ($exit -eq 0) { $rgInstalled = $true }
+            }
+            if (-not $rgInstalled -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+                $exit = Invoke-NativeQuiet "scoop" @("install", "ripgrep")
+                if ($exit -eq 0) { $rgInstalled = $true }
+            }
+        } catch {}
+        if (-not $rgInstalled -and -not (Get-Command rg -ErrorAction SilentlyContinue)) {
+            Write-Host "[$Tool] WARNING: ripgrep (rg) not found — fallback_rg search may fail. Install: https://github.com/BurntSushi/ripgrep"
+        }
+    }
+
     # Validate project path exists before resolving
     if (-not (Test-Path -LiteralPath $ProjectPath)) {
         $msg = "Project path not found: $ProjectPath"

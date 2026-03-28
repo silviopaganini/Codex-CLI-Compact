@@ -1,3 +1,6 @@
+3.9.37
+- Fixed: ripgrep (rg) now auto-installed on first run if missing (macOS: brew, Linux: apt/dnf/yum/pacman, Windows: winget/choco/scoop) — resolves fallback_rg "No such file or directory: rg" error
+
 3.9.36
 - Fixed: graph_read cap raised 4k→20k chars; turn budget raised 18k→60k — prevents double-reads of source files
 - Fixed: PHP symbol extractor now uses brace-counting for accurate line_end (was fixed +50 lines)

@@ -322,6 +322,31 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     fi
   fi
 fi
+
+# ripgrep (rg) is required by the fallback_rg MCP tool — install if missing
+if ! command -v rg &>/dev/null; then
+  echo "[$TOOL_LABEL] Installing ripgrep (required for code search)..."
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    if command -v brew &>/dev/null; then
+      brew install ripgrep 2>/dev/null || true
+    else
+      echo "[$TOOL_LABEL] Please install ripgrep: brew install ripgrep"
+    fi
+  elif command -v apt-get &>/dev/null; then
+    sudo apt-get install -y -qq ripgrep 2>/dev/null || true
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y ripgrep 2>/dev/null || true
+  elif command -v yum &>/dev/null; then
+    sudo yum install -y ripgrep 2>/dev/null || true
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm ripgrep 2>/dev/null || true
+  else
+    echo "[$TOOL_LABEL] Please install ripgrep manually: https://github.com/BurntSushi/ripgrep#installation"
+  fi
+  if ! command -v rg &>/dev/null; then
+    echo "[$TOOL_LABEL] WARNING: ripgrep (rg) not found — fallback_rg search may fail. Install: https://github.com/BurntSushi/ripgrep"
+  fi
+fi
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── Python discovery & venv setup ────────────────────────────────────────────
