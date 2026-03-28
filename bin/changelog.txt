@@ -1,3 +1,9 @@
+3.9.36
+- Fixed: graph_read cap raised 4k→20k chars; turn budget raised 18k→60k — prevents double-reads of source files
+- Fixed: PHP symbol extractor now uses brace-counting for accurate line_end (was fixed +50 lines)
+- Fixed: PHP 8.1 enums now extracted as model symbols (enum keyword was missing from class regex)
+- Added: PHP symbol extraction in PyPI package (src/graperoot/graph_builder.py was missing PHP support entirely)
+
 3.9.35
 - Fixed: dg.exe conflict on Windows now self-heals on any graperoot invocation (dgc, dg, graperoot --cursor/gemini/opencode/copilot all remove stale dg.exe automatically)
 
