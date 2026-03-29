@@ -108,22 +108,34 @@ $_R2       = "https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 $_VerFile  = Join-Path $DG "version.txt"
 $_LocalVer = if (Test-Path $_VerFile) { (Get-Content $_VerFile -Raw).Trim() } else { "0" }
 $_RemoteVer = ""
-try { $_RemoteVer = (Invoke-WebRequest "$_BaseUrl/bin/version.txt" -UseBasicParsing -TimeoutSec 4).Content.Trim() } catch {
-    try { $_RemoteVer = (Invoke-WebRequest "$_R2/version.txt" -UseBasicParsing -TimeoutSec 4).Content.Trim() } catch {}
+try { $_RemoteVer = (Invoke-WebRequest "$_R2/version.txt" -UseBasicParsing -TimeoutSec 4).Content.Trim() } catch {
+    try { $_RemoteVer = (Invoke-WebRequest "$_BaseUrl/bin/version.txt" -UseBasicParsing -TimeoutSec 4).Content.Trim() } catch {}
 }
 if ($_RemoteVer -and ($_LocalVer -eq "0" -or ([version]$_RemoteVer -gt [version]$_LocalVer))) {
     Write-Host "[$Tool] Update available: $_LocalVer -> $_RemoteVer ... updating"
-    $_updateList = @(
-        @{ Src = "$_BaseUrl/bin/graperoot.ps1"; Dst = (Join-Path $DG "graperoot.ps1") },
-        @{ Src = "$_BaseUrl/bin/graperoot.cmd"; Dst = (Join-Path $DG "graperoot.cmd") },
-        @{ Src = "$_BaseUrl/bin/dgc.ps1";       Dst = (Join-Path $DG "dgc.ps1") },
-        @{ Src = "$_BaseUrl/bin/dg.ps1";        Dst = (Join-Path $DG "dg.ps1") },
-        @{ Src = "$_BaseUrl/bin/dual_graph_launch.sh"; Dst = (Join-Path $DG "dual_graph_launch.sh") },
-        @{ Src = "$_R2/mcp_graph_server.py";    Dst = (Join-Path $DG "mcp_graph_server.py") }
-    )
-    foreach ($item in $_updateList) {
-        try { Invoke-WebRequest $item.Src -OutFile $item.Dst -UseBasicParsing -TimeoutSec 15 | Out-Null } catch {}
+    # Atomic R2-first download: write to .tmp, validate size, then move — prevents corrupt partial writes.
+    # R2 is trusted (no CDN cache), so no ScriptBlock parse check needed.
+    # GitHub is fallback in case R2 is unreachable.
+    function _dl([string]$R2Url, [string]$GhUrl, [string]$OutFile) {
+        $t = $OutFile + ".tmp"
+        foreach ($url in @($R2Url, $GhUrl)) {
+            if (-not $url) { continue }
+            try {
+                Invoke-WebRequest $url -OutFile $t -UseBasicParsing -TimeoutSec 15
+                if ((Test-Path $t) -and (Get-Item $t).Length -gt 0) {
+                    Move-Item $t $OutFile -Force; return
+                }
+            } catch {}
+            Remove-Item $t -Force -ErrorAction SilentlyContinue
+        }
     }
+    _dl "$_R2/graperoot.ps1"        "$_BaseUrl/bin/graperoot.ps1"        (Join-Path $DG "graperoot.ps1")
+    _dl "$_R2/graperoot.cmd"        "$_BaseUrl/bin/graperoot.cmd"        (Join-Path $DG "graperoot.cmd")
+    _dl "$_R2/dgc.ps1"              "$_BaseUrl/bin/dgc.ps1"              (Join-Path $DG "dgc.ps1")
+    _dl "$_R2/dg.ps1"               "$_BaseUrl/bin/dg.ps1"               (Join-Path $DG "dg.ps1")
+    _dl "$_R2/dgc.cmd"              "$_BaseUrl/bin/dgc.cmd"              (Join-Path $DG "dgc.cmd")
+    _dl "$_R2/dg.cmd"               "$_BaseUrl/bin/dg.cmd"               (Join-Path $DG "dg.cmd")
+    _dl "$_R2/dual_graph_launch.sh" "$_BaseUrl/bin/dual_graph_launch.sh" (Join-Path $DG "dual_graph_launch.sh")
     try { $_RemoteVer | Set-Content -Path $_VerFile -Encoding UTF8 } catch {}
     Write-Host "[$Tool] Updated to $_RemoteVer. Restarting..."
     $_newScript = Join-Path $DG "graperoot.ps1"

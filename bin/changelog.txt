@@ -1,3 +1,8 @@
+3.9.44
+- Fixed: all self-update downloads now use R2 as primary source (GitHub CDN as fallback) — prevents stale cached PS1 being written after update
+- Fixed: graperoot.cmd rewritten with atomic R2-first bootstrap (same pattern as dgc.cmd/dg.cmd)
+- Fixed: graperoot.ps1 self-update uses atomic R2-first download with GitHub fallback
+
 3.9.43
 - Fixed: cmd self-heal now works on PS5.1 Windows-1252 systems — R2 (trusted) uses plain size check, GitHub fallback uses ScriptBlock::Create with -Encoding UTF8; em dash bytes in PS1 comments were causing ScriptBlock::Create to reject the clean R2 file
 

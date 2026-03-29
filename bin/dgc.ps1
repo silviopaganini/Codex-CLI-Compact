@@ -342,18 +342,18 @@ try {
                 }
                 Write-Host "[$Tool] Update available: $localVer -> $remoteVer ... updating"
                 $downloads = @(
-                    @{ Primary = "$BaseUrl/bin/dual_graph_launch.sh";Fallback = "$R2/dual_graph_launch.sh";Out = (Join-Path $DG "dual_graph_launch.sh") },
-                    @{ Primary = "$BaseUrl/bin/dgc.ps1";             Fallback = "$R2/dgc.ps1";            Out = (Join-Path $DG "dgc.ps1") },
-                    @{ Primary = "$BaseUrl/bin/dg.ps1";              Fallback = "$R2/dg.ps1";             Out = (Join-Path $DG "dg.ps1") },
-                    @{ Primary = "$BaseUrl/bin/dgc.cmd";             Fallback = "$R2/dgc.cmd";            Out = (Join-Path $DG "dgc.cmd") },
-                    @{ Primary = "$BaseUrl/bin/dg.cmd";              Fallback = "$R2/dg.cmd";             Out = (Join-Path $DG "dg.cmd") },
-                    @{ Primary = "$BaseUrl/bin/graperoot.ps1";       Fallback = "$R2/graperoot.ps1";      Out = (Join-Path $DG "graperoot.ps1") },
-                    @{ Primary = "$BaseUrl/bin/graperoot.cmd";       Fallback = "$R2/graperoot.cmd";      Out = (Join-Path $DG "graperoot.cmd") }
+                    @{ Primary = "$R2/dual_graph_launch.sh"; Fallback = "$BaseUrl/bin/dual_graph_launch.sh"; Out = (Join-Path $DG "dual_graph_launch.sh") },
+                    @{ Primary = "$R2/dgc.ps1";             Fallback = "$BaseUrl/bin/dgc.ps1";            Out = (Join-Path $DG "dgc.ps1") },
+                    @{ Primary = "$R2/dg.ps1";              Fallback = "$BaseUrl/bin/dg.ps1";             Out = (Join-Path $DG "dg.ps1") },
+                    @{ Primary = "$R2/dgc.cmd";             Fallback = "$BaseUrl/bin/dgc.cmd";            Out = (Join-Path $DG "dgc.cmd") },
+                    @{ Primary = "$R2/dg.cmd";              Fallback = "$BaseUrl/bin/dg.cmd";             Out = (Join-Path $DG "dg.cmd") },
+                    @{ Primary = "$R2/graperoot.ps1";       Fallback = "$BaseUrl/bin/graperoot.ps1";      Out = (Join-Path $DG "graperoot.ps1") },
+                    @{ Primary = "$R2/graperoot.cmd";       Fallback = "$BaseUrl/bin/graperoot.cmd";      Out = (Join-Path $DG "graperoot.cmd") }
                 )
                 foreach ($item in $downloads) { [void](Download-File $item.Primary $item.Fallback $item.Out) }
                 $dgcPs1 = Join-Path $DG "dgc.ps1"
                 if ((Test-Path $dgcPs1) -and (Get-Item $dgcPs1).Length -gt 1024) {
-                    [void](Download-File "$BaseUrl/bin/version.txt" "$R2/version.txt" (Join-Path $DG "version.txt"))
+                    [void](Download-File "$R2/version.txt" "$BaseUrl/bin/version.txt" (Join-Path $DG "version.txt"))
                 }
                 # Upgrade graperoot so venv gets latest mcp_graph_server + compiled modules
                 $venvPip = Join-Path $DG "venv\Scripts\pip.exe"
