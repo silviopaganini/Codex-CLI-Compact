@@ -1,3 +1,6 @@
+3.9.38
+- Fixed: ripgrep auto-install no longer crashes dgc on Windows when winget throws a parameter binding error — falls back to warning instead
+
 3.9.37
 - Fixed: ripgrep (rg) now auto-installed on first run if missing (macOS: brew, Linux: apt/dnf/yum/pacman, Windows: winget/choco/scoop) — resolves fallback_rg "No such file or directory: rg" error
 
