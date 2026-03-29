@@ -1,3 +1,7 @@
+3.9.41
+- Fixed: dg.ps1 missing all three Windows crash fixes (atomic download, ripgrep outer try/catch, $resolvedProject null fallback) — dg was silently carrying the same bugs as dgc pre-3.9.40
+- Fixed: install.ps1 now downloads dgc.ps1/dg.ps1/graperoot.ps1 from R2 first (GitHub as fallback) — bypasses GitHub CDN cache so re-installs always get the latest version
+
 3.9.40
 - Fixed: self-update now downloads to .tmp file then moves atomically — prevents corrupt dgc.ps1 if network drops mid-download
 

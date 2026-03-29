@@ -416,10 +416,23 @@ try {
     Write-Host "[install] Downloading CLI wrappers..."
     Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.cmd"       -OutFile "$INSTALL_DIR\dgc.cmd"       -Label "Download dgc.cmd"
     Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.cmd"        -OutFile "$INSTALL_DIR\dg.cmd"        -Label "Download dg.cmd"
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.ps1"       -OutFile "$INSTALL_DIR\dgc.ps1"       -Label "Download dgc.ps1"
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.ps1"        -OutFile "$INSTALL_DIR\dg.ps1"        -Label "Download dg.ps1"
+    # PS1 launchers: try R2 first (avoids GitHub CDN cache), fall back to GitHub
+    try {
+        Invoke-WebRequestWithRetry -Uri "$R2/dgc.ps1" -OutFile "$INSTALL_DIR\dgc.ps1" -Label "Download dgc.ps1"
+    } catch {
+        Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dgc.ps1" -OutFile "$INSTALL_DIR\dgc.ps1" -Label "Download dgc.ps1 (GitHub fallback)"
+    }
+    try {
+        Invoke-WebRequestWithRetry -Uri "$R2/dg.ps1" -OutFile "$INSTALL_DIR\dg.ps1" -Label "Download dg.ps1"
+    } catch {
+        Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/dg.ps1" -OutFile "$INSTALL_DIR\dg.ps1" -Label "Download dg.ps1 (GitHub fallback)"
+    }
     Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/graperoot.cmd" -OutFile "$INSTALL_DIR\graperoot.cmd" -Label "Download graperoot.cmd"
-    Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/graperoot.ps1" -OutFile "$INSTALL_DIR\graperoot.ps1" -Label "Download graperoot.ps1"
+    try {
+        Invoke-WebRequestWithRetry -Uri "$R2/graperoot.ps1" -OutFile "$INSTALL_DIR\graperoot.ps1" -Label "Download graperoot.ps1"
+    } catch {
+        Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/graperoot.ps1" -OutFile "$INSTALL_DIR\graperoot.ps1" -Label "Download graperoot.ps1 (GitHub fallback)"
+    }
     try {
         Invoke-WebRequestWithRetry -Uri "$BASE_URL/bin/version.txt" -OutFile "$INSTALL_DIR\version.txt" -Label "Download version.txt"
     } catch {

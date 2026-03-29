@@ -51,16 +51,26 @@ function Get-Text([string]$Uri) {
 }
 
 function Download-File([string]$Primary, [string]$Fallback, [string]$OutFile) {
+    # Download to a temp file first, then move atomically — prevents corrupt partial writes
+    # if the network drops mid-download (which would leave $OutFile half-written and unparseable).
+    $tmp = $OutFile + ".tmp"
     try {
-        Invoke-WebRequest $Primary -OutFile $OutFile -UseBasicParsing -TimeoutSec 15
-        return $true
-    } catch {
-        if ($Fallback) {
-            try {
-                Invoke-WebRequest $Fallback -OutFile $OutFile -UseBasicParsing -TimeoutSec 15
-                return $true
-            } catch {}
+        Invoke-WebRequest $Primary -OutFile $tmp -UseBasicParsing -TimeoutSec 15
+        if ((Test-Path $tmp) -and (Get-Item $tmp).Length -gt 0) {
+            Move-Item $tmp $OutFile -Force
+            return $true
         }
+    } catch {}
+    Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    if ($Fallback) {
+        try {
+            Invoke-WebRequest $Fallback -OutFile $tmp -UseBasicParsing -TimeoutSec 15
+            if ((Test-Path $tmp) -and (Get-Item $tmp).Length -gt 0) {
+                Move-Item $tmp $OutFile -Force
+                return $true
+            }
+        } catch {}
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
     }
     return $false
 }
@@ -399,30 +409,44 @@ try {
     }
 
     # ripgrep (rg) is required by the fallback_rg MCP tool — install if missing
-    if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
-        Write-Host "[$Tool] Installing ripgrep (required for code search)..."
-        $rgInstalled = $false
-        try {
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                $exit = Invoke-NativeQuiet "winget" @("install", "--id", "BurntSushi.ripgrep.MSVC", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements")
-                if ($exit -eq 0) { $rgInstalled = $true }
+    try {
+        if (-not (Get-Command rg -ErrorAction SilentlyContinue)) {
+            Write-Host "[$Tool] Installing ripgrep (required for code search)..."
+            $rgInstalled = $false
+            try {
+                if (Get-Command winget -ErrorAction SilentlyContinue) {
+                    $rgExit = Invoke-NativeQuiet "winget" @("install", "--id", "BurntSushi.ripgrep.MSVC", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+                    if ($rgExit -eq 0) { $rgInstalled = $true }
+                }
+                if (-not $rgInstalled -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+                    $rgExit = Invoke-NativeQuiet "choco" @("install", "ripgrep", "-y")
+                    if ($rgExit -eq 0) { $rgInstalled = $true }
+                }
+                if (-not $rgInstalled -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
+                    $rgExit = Invoke-NativeQuiet "scoop" @("install", "ripgrep")
+                    if ($rgExit -eq 0) { $rgInstalled = $true }
+                }
+            } catch {}
+            if (-not $rgInstalled -and -not (Get-Command rg -ErrorAction SilentlyContinue)) {
+                Write-Host "[$Tool] WARNING: ripgrep (rg) not found — fallback_rg search may fail. Install: https://github.com/BurntSushi/ripgrep"
             }
-            if (-not $rgInstalled -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-                $exit = Invoke-NativeQuiet "choco" @("install", "ripgrep", "-y")
-                if ($exit -eq 0) { $rgInstalled = $true }
-            }
-            if (-not $rgInstalled -and (Get-Command scoop -ErrorAction SilentlyContinue)) {
-                $exit = Invoke-NativeQuiet "scoop" @("install", "ripgrep")
-                if ($exit -eq 0) { $rgInstalled = $true }
-            }
-        } catch {}
-        if (-not $rgInstalled -and -not (Get-Command rg -ErrorAction SilentlyContinue)) {
-            Write-Host "[$Tool] WARNING: ripgrep (rg) not found — fallback_rg search may fail. Install: https://github.com/BurntSushi/ripgrep"
         }
+    } catch {
+        Write-Host "[$Tool] WARNING: ripgrep auto-install failed ($($_.Exception.Message)). Install manually: https://github.com/BurntSushi/ripgrep"
     }
 
     # Use Get-Item to get the canonical Windows path with correct casing
-    $resolvedProject = (Get-Item -LiteralPath (Resolve-Path -LiteralPath $ProjectPath).Path).FullName
+    # (Resolve-Path preserves whatever casing the user typed, which can cause os error 123)
+    # Fallback: GetUnresolvedProviderPathFromPSPath always returns a full path on PS5.1
+    # when Get-Item/.FullName returns null (observed on some PS5 Windows environments).
+    try {
+        $resolvedProject = (Get-Item -LiteralPath (Resolve-Path -LiteralPath $ProjectPath).Path).FullName
+    } catch {
+        $resolvedProject = $null
+    }
+    if (-not $resolvedProject) {
+        $resolvedProject = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ProjectPath)
+    }
 
     Write-Host ""
     Write-Host "[$Tool] If you receive any errors:"
