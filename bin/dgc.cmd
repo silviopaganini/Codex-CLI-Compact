@@ -38,11 +38,11 @@ if defined SCOOP (
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$gh='%REMOTE_PS1%';$r2='%REMOTE_PS1_R2%';$loc='%LOCAL_PS1%';$bs='%BOOTSTRAP_PS1%';" ^
-  "function dl($u,$o){try{Invoke-WebRequest $u -OutFile $o -UseBasicParsing -TimeoutSec 10|Out-Null;return $true}catch{return $false}};" ^
-  "if(-not(dl $gh $loc)){dl $r2 $loc|Out-Null};" ^
-  "if(-not(dl $gh $bs)){dl $r2 $bs|Out-Null};" ^
-  "dl '%REMOTE_GR_CMD%' '%DG%\graperoot.cmd'|Out-Null;if(-not(Test-Path '%DG%\graperoot.cmd')){dl '%REMOTE_GR_CMD_R2%' '%DG%\graperoot.cmd'|Out-Null};" ^
-  "dl '%REMOTE_GR_PS1%' '%DG%\graperoot.ps1'|Out-Null;if(-not(Test-Path '%DG%\graperoot.ps1')){dl '%REMOTE_GR_PS1_R2%' '%DG%\graperoot.ps1'|Out-Null}" ^
+  "function dl($u,$o){$t=$o+'.tmp';try{Invoke-WebRequest $u -OutFile $t -UseBasicParsing -TimeoutSec 15;if((Test-Path $t)-and(Get-Item $t).Length-gt 1024){Move-Item $t $o -Force;return $true}}catch{};Remove-Item $t -Force -EA SilentlyContinue;return $false};" ^
+  "function dls($u,$o){$t=$o+'.tmp';try{Invoke-WebRequest $u -OutFile $t -UseBasicParsing -TimeoutSec 15;if((Test-Path $t)-and(Get-Item $t).Length-gt 1024){try{[void][System.Management.Automation.ScriptBlock]::Create((Get-Content $t -Raw));Move-Item $t $o -Force;return $true}catch{}}}catch{};Remove-Item $t -Force -EA SilentlyContinue;return $false};" ^
+  "if(-not(dls $r2 $bs)){dls $gh $bs|Out-Null};if(-not(dls $r2 $loc)){dls $gh $loc|Out-Null};" ^
+  "dl '%REMOTE_GR_CMD_R2%' '%DG%\graperoot.cmd'|Out-Null;if(-not(Test-Path '%DG%\graperoot.cmd')){dl '%REMOTE_GR_CMD%' '%DG%\graperoot.cmd'|Out-Null};" ^
+  "dl '%REMOTE_GR_PS1_R2%' '%DG%\graperoot.ps1'|Out-Null;if(-not(Test-Path '%DG%\graperoot.ps1')){dl '%REMOTE_GR_PS1%' '%DG%\graperoot.ps1'|Out-Null}" ^
   >nul 2>&1
 
 if exist "%BOOTSTRAP_PS1%" (

@@ -1,3 +1,6 @@
+3.9.42
+- Fixed: dgc.cmd and dg.cmd now self-heal corrupted .ps1 files automatically on every run — atomic download, size check, and PS1 parse validation (ScriptBlock::Create) before replacing; R2-first so GitHub CDN cache can never serve a broken launcher again
+
 3.9.41
 - Fixed: dg.ps1 missing all three Windows crash fixes (atomic download, ripgrep outer try/catch, $resolvedProject null fallback) — dg was silently carrying the same bugs as dgc pre-3.9.40
 - Fixed: install.ps1 now downloads dgc.ps1/dg.ps1/graperoot.ps1 from R2 first (GitHub as fallback) — bypasses GitHub CDN cache so re-installs always get the latest version
