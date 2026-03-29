@@ -1,5 +1,5 @@
 @echo off
-:: dg — stable Windows bootstrap for Codex CLI + dual-graph
+:: dg - stable Windows bootstrap for Codex CLI + dual-graph
 :: Keeps the entrypoint minimal and delegates launcher logic to PowerShell.
 
 setlocal
@@ -36,6 +36,9 @@ if defined SCOOP (
   )
 )
 
+:: Download fresh PS1 from R2 (trusted, no CDN cache) to bootstrap and local.
+:: dl  = atomic download, R2-trusted (no parse check needed).
+:: dls = atomic download + UTF8 ScriptBlock::Create validation (for GitHub fallback).
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$gh='%REMOTE_PS1%';$r2='%REMOTE_PS1_R2%';$loc='%LOCAL_PS1%';$bs='%BOOTSTRAP_PS1%';" ^
   "function dl($u,$o){$t=$o+'.tmp';try{Invoke-WebRequest $u -OutFile $t -UseBasicParsing -TimeoutSec 15;if((Test-Path $t)-and(Get-Item $t).Length-gt 1024){Move-Item $t $o -Force;return $true}}catch{};Remove-Item $t -Force -EA SilentlyContinue;return $false};" ^
@@ -45,11 +48,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "dl '%REMOTE_GR_PS1_R2%' '%DG%\graperoot.ps1'|Out-Null;if(-not(Test-Path '%DG%\graperoot.ps1')){dl '%REMOTE_GR_PS1%' '%DG%\graperoot.ps1'|Out-Null}" ^
   >nul 2>&1
 
+:: Run bootstrap if it exists and is valid PS1 (R2 could return HTML on error).
 if exist "%BOOTSTRAP_PS1%" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOTSTRAP_PS1%" %*
-  set "EXIT_CODE=%ERRORLEVEL%"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "try{[void][System.Management.Automation.ScriptBlock]::Create((Get-Content '%BOOTSTRAP_PS1%' -Raw -Encoding UTF8));exit 0}catch{exit 1}" >nul 2>&1
+  if not errorlevel 1 (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%BOOTSTRAP_PS1%" %*
+    set "EXIT_CODE=%ERRORLEVEL%"
+    del "%BOOTSTRAP_PS1%" >nul 2>&1
+    exit /b %EXIT_CODE%
+  )
   del "%BOOTSTRAP_PS1%" >nul 2>&1
-  exit /b %EXIT_CODE%
+)
+
+:: Self-heal: validate local PS1 before running. If corrupted, delete and re-download from R2.
+if exist "%LOCAL_PS1%" (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "try{[void][System.Management.Automation.ScriptBlock]::Create((Get-Content '%LOCAL_PS1%' -Raw -Encoding UTF8));exit 0}catch{exit 1}" >nul 2>&1
+  if errorlevel 1 (
+    del "%LOCAL_PS1%" >nul 2>&1
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$t='%LOCAL_PS1%'+'.tmp';Invoke-WebRequest '%REMOTE_PS1_R2%' -OutFile $t -UseBasicParsing -TimeoutSec 20;if((Test-Path $t)-and(Get-Item $t).Length-gt 1024){Move-Item $t '%LOCAL_PS1%' -Force}}catch{try{$t='%LOCAL_PS1%'+'.tmp';Invoke-WebRequest '%REMOTE_PS1%' -OutFile $t -UseBasicParsing -TimeoutSec 20;if((Test-Path $t)-and(Get-Item $t).Length-gt 1024){Move-Item $t '%LOCAL_PS1%' -Force}}catch{}}" >nul 2>&1
+  )
 )
 
 if exist "%LOCAL_PS1%" (

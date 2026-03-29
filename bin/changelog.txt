@@ -1,3 +1,7 @@
+3.9.46
+- Fixed: dgc.cmd and dg.cmd now validate local PS1 before running — if corrupted, auto-delete and re-download from R2 (self-heal without needing reinstall)
+- Fixed: bootstrap PS1 also validated before running — discarded if R2 returned HTML error page instead of PS1
+
 3.9.45
 - Fixed: removed all UTF-8 em dashes and BOM from PS1 files — PS5.1 Windows-1252 misread 0x94 as a right double-quote causing parser to report missing closing braces (root cause of all PS1 parse errors since 3.9.37)
 
