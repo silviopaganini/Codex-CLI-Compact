@@ -1,3 +1,6 @@
+3.9.39
+- Fixed: $resolvedProject null crash on PowerShell 5.1 Windows — fallback to GetUnresolvedProviderPathFromPSPath when Get-Item/.FullName returns null
+
 3.9.38
 - Fixed: ripgrep auto-install no longer crashes dgc on Windows when winget throws a parameter binding error — falls back to warning instead
 

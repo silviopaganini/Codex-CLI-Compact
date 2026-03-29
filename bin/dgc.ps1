@@ -566,7 +566,16 @@ try {
 
     # Use Get-Item to get the canonical Windows path with correct casing
     # (Resolve-Path preserves whatever casing the user typed, which can cause os error 123)
-    $resolvedProject = (Get-Item -LiteralPath (Resolve-Path -LiteralPath $ProjectPath).Path).FullName
+    # Fallback: GetUnresolvedProviderPathFromPSPath always returns a full path on PS5.1
+    # when Get-Item/.FullName returns null (observed on some PS5 Windows environments).
+    try {
+        $resolvedProject = (Get-Item -LiteralPath (Resolve-Path -LiteralPath $ProjectPath).Path).FullName
+    } catch {
+        $resolvedProject = $null
+    }
+    if (-not $resolvedProject) {
+        $resolvedProject = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ProjectPath)
+    }
 
     Write-Host ""
     Write-Host "[$Tool] If you receive any errors:"
