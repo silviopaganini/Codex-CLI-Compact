@@ -397,7 +397,7 @@ if ($Assistant -eq "gemini") {
     $gemJsonCompact = $existing | ConvertTo-Json -Depth 5 -Compress
     $gemPyScript = @'
 import json, sys
-data = json.load(sys.stdin)
+data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig'))
 with open(sys.argv[1], 'w', encoding='utf-8') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
@@ -450,7 +450,7 @@ if ($Assistant -eq "opencode") {
     $ocJsonCompact = $ocOut | ConvertTo-Json -Depth 5 -Compress
     $pyScript = @'
 import json, sys
-data = json.load(sys.stdin)
+data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig'))
 with open(sys.argv[1], 'w', encoding='utf-8') as f:
     json.dump(data, f, indent=2)
     f.write('\n')
@@ -505,7 +505,7 @@ if ($Assistant -eq "copilot") {
     $vsJsonCompact = $vsConf | ConvertTo-Json -Depth 5 -Compress
     $vsPyScript = @'
 import json, sys
-data = json.load(sys.stdin)
+data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig'))
 with open(sys.argv[1], 'w', encoding='utf-8') as f:
     json.dump(data, f, indent=2)
     f.write('\n')

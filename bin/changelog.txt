@@ -1,3 +1,6 @@
+3.9.48
+- Fixed: graperoot --opencode/--gemini/--copilot BOM crash — inline Python stdin reads now use utf-8-sig to handle PS5.1 pipe encoding
+
 3.9.47
 - Fixed: JSON files (identity.json, context-store.json, settings.json) now written without UTF-8 BOM on PS5.1 — use [System.IO.File]::WriteAllText instead of Set-Content -Encoding UTF8 (affects dgc.ps1, dg.ps1, graperoot.ps1, install.ps1)
 - Fixed: all Python JSON reads now use utf-8-sig — silently handles any existing BOM-encoded files for previous users
