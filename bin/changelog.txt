@@ -1,3 +1,8 @@
+3.9.49
+- Added: .cs and .xaml file indexing for .NET/C# projects (symbol extraction, keywords, summaries, graph edges)
+- Fixed: removed machine-ID tracking — identity.json no longer created, no license server pings
+- Fixed: C# nullable return types (Order?) now correctly extracted; comment-triggered false symbols eliminated
+
 3.9.48
 - Fixed: graperoot --opencode/--gemini/--copilot BOM crash — inline Python stdin reads now use utf-8-sig to handle PS5.1 pipe encoding
 
