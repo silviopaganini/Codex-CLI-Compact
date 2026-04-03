@@ -1,3 +1,6 @@
+3.9.52
+- Fixed: graperoot --gemini/--opencode/--copilot PS5.1 BOM crash - write JSON via temp file instead of pipe to avoid PS5.1 encoding corruption
+
 3.9.51
 - Fixed: install.ps1 PS5.1 parse crash (MissingEndCurlyBrace) — removed all em dashes and box-drawing chars (byte 0x94); removed identity.json creation block
 

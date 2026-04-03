@@ -394,15 +394,10 @@ if ($Assistant -eq "gemini") {
     if (-not $existing.mcpServers) { $existing | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue @{} -Force }
     $existing.mcpServers | Add-Member -NotePropertyName "dual-graph" `
         -NotePropertyValue @{ httpUrl = "http://localhost:$McpPort/mcp" } -Force
-    $gemJsonCompact = $existing | ConvertTo-Json -Depth 5 -Compress
-    $gemPyScript = @'
-import json, sys
-data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig'))
-with open(sys.argv[1], 'w', encoding='utf-8') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-'@
-    $gemJsonCompact | & $Python -c $gemPyScript $GeminiConf
+    $gemTmp = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($gemTmp, ($existing | ConvertTo-Json -Depth 5 -Compress))
+    & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $gemTmp $GeminiConf
+    Remove-Item $gemTmp -ErrorAction SilentlyContinue
 
     Write-Host "[$Tool] MCP config written -> $GeminiConf"
     Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
@@ -445,17 +440,13 @@ if ($Assistant -eq "opencode") {
     $ocOut = [PSCustomObject]@{}
     $ocOut | Add-Member -NotePropertyName '$schema' -NotePropertyValue $ocSchema
     $ocOut | Add-Member -NotePropertyName 'mcp'     -NotePropertyValue $ocMcp
-    # Use Python to write JSON so the output is standard indent=2 (ConvertTo-Json adds
-    # extra alignment spaces that opencode's strict JSON parser rejects).
-    $ocJsonCompact = $ocOut | ConvertTo-Json -Depth 5 -Compress
-    $pyScript = @'
-import json, sys
-data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig'))
-with open(sys.argv[1], 'w', encoding='utf-8') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-'@
-    $ocJsonCompact | & $Python -c $pyScript $OpenCodeConf
+    # Use Python via temp file (not pipe) so the output is standard indent=2
+    # (ConvertTo-Json adds extra alignment spaces that opencode's strict parser rejects,
+    #  and PS5.1 pipes inject BOM bytes that corrupt JSON).
+    $ocTmp = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($ocTmp, ($ocOut | ConvertTo-Json -Depth 5 -Compress))
+    & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $ocTmp $OpenCodeConf
+    Remove-Item $ocTmp -ErrorAction SilentlyContinue
 
     Write-Host "[$Tool] MCP config written -> $OpenCodeConf"
     Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
@@ -502,15 +493,10 @@ if ($Assistant -eq "copilot") {
     if (-not $vsConf.servers) { $vsConf | Add-Member -NotePropertyName "servers" -NotePropertyValue ([PSCustomObject]@{}) -Force }
     $vsConf.servers | Add-Member -NotePropertyName "dual-graph" `
         -NotePropertyValue ([PSCustomObject]@{ type = "http"; url = "http://localhost:$McpPort/mcp" }) -Force
-    $vsJsonCompact = $vsConf | ConvertTo-Json -Depth 5 -Compress
-    $vsPyScript = @'
-import json, sys
-data = json.loads(sys.stdin.buffer.read().decode('utf-8-sig'))
-with open(sys.argv[1], 'w', encoding='utf-8') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-'@
-    $vsJsonCompact | & $Python -c $vsPyScript $McpJson
+    $vsTmp = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($vsTmp, ($vsConf | ConvertTo-Json -Depth 5 -Compress))
+    & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $vsTmp $McpJson
+    Remove-Item $vsTmp -ErrorAction SilentlyContinue
 
     Write-Host "[$Tool] MCP config written -> $McpJson"
     Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
