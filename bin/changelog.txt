@@ -1,3 +1,6 @@
+3.9.55
+- Fixed: "unbound variable CLAUDE_EXTRA_ARGS" crash when launching without extra flags
+
 3.9.54
 - Added: opt-in telemetry consent -- help us improve graperoot! One-time prompt, no private data or codebase info is ever sent
 - Added: anonymous error reporting (only if you opt in) -- helps us fix crashes faster

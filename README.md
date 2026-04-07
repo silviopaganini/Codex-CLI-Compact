@@ -165,7 +165,7 @@ get_session_stats()                  # running session cost
 
 The launcher checks for updates on every run and auto-updates if a new version is available. No manual intervention needed.
 
-Current version: **3.9.54**
+Current version: **3.9.55**
 
 ---
 

@@ -236,7 +236,8 @@ _request_telemetry_consent() {
   echo "[$TOOL_LABEL] Help improve graperoot by sharing anonymous error reports?"
   echo "[$TOOL_LABEL] This sends only error type and step (no code, paths, or personal data)."
   local answer=""
-  read -r -t 15 -p "[$TOOL_LABEL] Enable telemetry? (y/n): " answer 2>/dev/null || answer=""
+  printf "[$TOOL_LABEL] Enable telemetry? (y/n): "
+  read -r -t 15 answer 2>/dev/null || answer=""
   if [[ "$answer" =~ ^[Yy] ]]; then
     _set_telemetry_consent "enabled"
     echo "[$TOOL_LABEL] Telemetry enabled. Thank you!"
@@ -402,7 +403,7 @@ for n in notes: print(n)
   echo "[$TOOL_LABEL] Updated to $_REMOTE_VER. Restarting..."
   EXEC_ARGS=("$SCRIPT_DIR/dual_graph_launch.sh" "$ASSISTANT" "$PROJECT")
   [[ -n "$PROMPT" ]] && EXEC_ARGS+=("$PROMPT")
-  EXEC_ARGS+=("${CLAUDE_EXTRA_ARGS[@]}")
+  [[ ${#CLAUDE_EXTRA_ARGS[@]} -gt 0 ]] && EXEC_ARGS+=("${CLAUDE_EXTRA_ARGS[@]}")
   exec "${EXEC_ARGS[@]}"
 elif [[ -n "$_REMOTE_VER" && "$_REMOTE_VER" != "$_LOCAL_VER" ]]; then
   echo "[$TOOL_LABEL] Local version ($_LOCAL_VER) is newer than remote ($_REMOTE_VER); skipping downgrade."
@@ -1803,9 +1804,11 @@ if [[ ! -f "$_FEEDBACK_MARKER" ]] && [[ -t 0 ]] && [[ "$(_get_telemetry_consent)
   echo ""
   echo "[$TOOL_LABEL] Quick feedback (one-time, 10 seconds):"
   echo "[$TOOL_LABEL] How would you rate graperoot so far? (1=poor, 5=excellent)"
-  read -r -t 15 -p "[$TOOL_LABEL] Rating (1-5): " _RATING 2>/dev/null || _RATING=""
+  printf "[$TOOL_LABEL] Rating (1-5): "
+  read -r -t 15 _RATING 2>/dev/null || _RATING=""
   if [[ "$_RATING" =~ ^[1-5]$ ]]; then
-    read -r -t 30 -p "[$TOOL_LABEL] One thing we could improve? (Enter to skip): " _SUGGESTION 2>/dev/null || _SUGGESTION=""
+    printf "[$TOOL_LABEL] One thing we could improve? (Enter to skip): "
+    read -r -t 30 _SUGGESTION 2>/dev/null || _SUGGESTION=""
     (curl -sf -X POST "$FEEDBACK_WEBHOOK" \
       -H "Content-Type: application/json" \
       -d "{\"type\":\"feedback\",\"platform\":\"$(_platform_name)\",\"machine_id\":\"$(_machine_id)\",\"rating\":$_RATING,\"suggestion\":\"$(echo "$_SUGGESTION" | head -c 300 | tr '"\\' '..')\",\"tool\":\"$TOOL_LABEL\"}" \
@@ -1919,7 +1922,7 @@ else
   # Build launch args: optional prompt + all passthrough flags
   _LAUNCH_ARGS=()
   [[ -n "$PROMPT" ]] && _LAUNCH_ARGS+=("$PROMPT")
-  _LAUNCH_ARGS+=("${CLAUDE_EXTRA_ARGS[@]}")
+  [[ ${#CLAUDE_EXTRA_ARGS[@]} -gt 0 ]] && _LAUNCH_ARGS+=("${CLAUDE_EXTRA_ARGS[@]}")
   "$ASSISTANT" "${_LAUNCH_ARGS[@]}" 2>"$DATA_DIR/assistant_stderr.log"
 fi
 ASSISTANT_EXIT=$?
