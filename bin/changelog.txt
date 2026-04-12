@@ -1,3 +1,6 @@
+3.9.59
+- Fixed: Gradle/Maven build/ dirs no longer skip source modules named "build"
+
 3.9.57
 - Fixed: shell parse crash on Linux (tr quoting in telemetry/feedback curl) -- use octal escapes
 - Fixed: Gemini CLI not picking up dual graph policy (was writing to CLAUDE.md instead of GEMINI.md)
