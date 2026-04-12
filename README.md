@@ -1,6 +1,6 @@
-# Dual-Graph — Compounding Context for Claude Code & Codex CLI
+# Dual-Graph — Compounding Context for AI Coding Assistants
 
-A context engine that makes Claude Code and Codex CLI **30-45% cheaper** without sacrificing quality. It builds a semantic graph of your codebase and pre-loads the right files into every prompt — so Claude spends tokens reasoning, not exploring.
+A context engine that makes Claude Code, Codex CLI, Gemini CLI, Cursor, OpenCode, and GitHub Copilot **30-45% cheaper** without sacrificing quality. It builds a semantic graph of your codebase and pre-loads the right files into every prompt — so your AI spends tokens reasoning, not exploring.
 
 Works on **macOS, Linux, and Windows**. Supports any project size.
 
@@ -82,12 +82,39 @@ dg /path/to/project              # scan a specific project
 dg /path/to/project "add tests"  # start with a prompt
 ```
 
+### Other AI Assistants (`graperoot`)
+
+You can also use the `graperoot` command directly with any supported assistant:
+
+```bash
+graperoot .                      # current directory, default (Claude)
+graperoot . --cursor             # Cursor
+graperoot . --gemini             # Gemini CLI
+graperoot . --opencode           # OpenCode
+graperoot . --copilot            # GitHub Copilot
+graperoot . --codex              # Codex CLI
+graperoot /path/to/project --cursor           # specific project
+graperoot /path/to/project --gemini "add tests"  # with a prompt
+```
+
+Or via the `dgc` / `dg` aliases with an assistant flag:
+
+```bash
+dgc --gemini /path/to/project    # Gemini CLI
+dgc --cursor /path/to/project    # Cursor
+dgc --opencode /path/to/project  # OpenCode
+dgc --copilot /path/to/project   # GitHub Copilot
+```
+
+Typo detection is built in — `--claud` or `--gemi` will suggest the correct flag instead of silently failing.
+
 ### Windows
 
 ```powershell
 dgc .                            # from inside the project directory
 dgc "D:\projects\my-app"         # any drive, any path
 dg "C:\work\backend"             # Codex CLI
+dgc --gemini "D:\projects\app"   # Gemini CLI on Windows
 ```
 
 ---
@@ -236,6 +263,18 @@ Have a question, found a bug, or want to share feedback?
 A huge thank you to everyone who used early versions of Dual-Graph and shared feedback through the telemetry program — your usage data helped us squash bugs and stabilize the tool into what it is today. We've now removed all telemetry in favor of full transparency.
 
 Want to keep helping shape the project? **[Join the Discord](https://discord.com/invite/YwKdQATY2d)**
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=kunal12203%2FCodex-CLI-Compact&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=kunal12203/Codex-CLI-Compact&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=kunal12203/Codex-CLI-Compact&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=kunal12203/Codex-CLI-Compact&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ---
 

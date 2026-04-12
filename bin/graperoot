@@ -65,14 +65,17 @@ ASSISTANT="claude"   # default
 PROJECT=""
 PASSTHROUGH=()
 
+_VALID_TOOLS="claude codex cursor gemini opencode copilot"
+_TOOL_SET=false
+
 for arg in "$@"; do
   case "$arg" in
-    --claude|claude)     ASSISTANT="claude"   ;;
-    --codex|codex)       ASSISTANT="codex"    ;;
-    --cursor|cursor)     ASSISTANT="cursor"   ;;
-    --gemini|gemini)     ASSISTANT="gemini"   ;;
-    --opencode|opencode) ASSISTANT="opencode" ;;
-    --copilot|copilot)   ASSISTANT="copilot"  ;;
+    --claude|claude)     ASSISTANT="claude";   _TOOL_SET=true ;;
+    --codex|codex)       ASSISTANT="codex";    _TOOL_SET=true ;;
+    --cursor|cursor)     ASSISTANT="cursor";   _TOOL_SET=true ;;
+    --gemini|gemini)     ASSISTANT="gemini";   _TOOL_SET=true ;;
+    --opencode|opencode) ASSISTANT="opencode"; _TOOL_SET=true ;;
+    --copilot|copilot)   ASSISTANT="copilot";  _TOOL_SET=true ;;
     *)
       # First non-flag positional arg is the project path
       if [[ -z "$PROJECT" && "$arg" != --* ]]; then
@@ -83,6 +86,24 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Catch typos like --claud, --gemi, --curs — check if any passthrough arg looks
+# like a misspelled tool flag (starts with -- and is not a known claude CLI flag)
+if ! $_TOOL_SET; then
+  for _pt in "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}"; do
+    _bare="${_pt#--}"
+    if [[ "$_pt" == --* && "$_bare" != *=* ]]; then
+      # Check if it's close to a valid tool name (prefix match)
+      for _t in $_VALID_TOOLS; do
+        if [[ "$_t" == "$_bare"* || "$_bare" == "$_t"* ]]; then
+          echo "[graperoot] Unknown tool '--$_bare'. Did you mean '--$_t'?" >&2
+          echo "[graperoot] Valid tools: $_VALID_TOOLS" >&2
+          exit 2
+        fi
+      done
+    fi
+  done
+fi
 
 [[ -z "$PROJECT" ]] && PROJECT="$(pwd)"
 
