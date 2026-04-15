@@ -1,3 +1,6 @@
+3.9.60
+- Fixed: Codex subagent MCP handshake failure — register mcp-remote using absolute binary path instead of npx to eliminate startup latency that caused "connection closed: initialize response" in subagent mode
+
 3.9.59
 - Fixed: Gradle/Maven build/ dirs no longer skip source modules named "build"
 

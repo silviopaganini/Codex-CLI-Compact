@@ -1449,22 +1449,33 @@ if [[ "$ASSISTANT" == "codex" ]]; then
     echo "[$TOOL_LABEL] codex CLI installed."
   fi
 
-  # Auto-install mcp-remote if missing (Codex needs stdio bridge)
-  if ! command -v mcp-remote &>/dev/null && ! npx mcp-remote --help &>/dev/null 2>&1; then
-    echo "[$TOOL_LABEL] mcp-remote not found — installing..."
+  # Auto-install mcp-remote globally (Codex needs stdio bridge).
+  # Always install globally so subagents can start it without npx overhead —
+  # npx startup latency causes handshake timeouts in Codex subagent mode.
+  if ! command -v mcp-remote &>/dev/null; then
+    echo "[$TOOL_LABEL] mcp-remote not found — installing globally..."
     npm install -g mcp-remote >/dev/null 2>&1 || true
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
   fi
 
+  # Resolve absolute path to mcp-remote binary for stable subagent startup.
+  # Subagents inherit PATH unreliably; an absolute path bypasses that entirely.
+  _MCP_REMOTE_BIN="$(command -v mcp-remote 2>/dev/null || true)"
+
   codex mcp remove dual-graph >/dev/null 2>&1 || true
-  # Codex CLI only supports stdio MCP — use mcp-remote to bridge HTTP->stdio
+  # Codex CLI only supports stdio MCP — use mcp-remote to bridge HTTP->stdio.
+  # Prefer global binary (fast startup) over npx (slow, causes subagent timeouts).
   _CODEX_REG_OK=0
   _CODEX_REG_ERR=""
-  # Try npx first, then global mcp-remote
-  if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
-    _CODEX_REG_OK=1
-  elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
-    _CODEX_REG_OK=1
+  if [[ -n "$_MCP_REMOTE_BIN" ]]; then
+    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- "$_MCP_REMOTE_BIN" "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+      _CODEX_REG_OK=1
+    fi
+  fi
+  if [[ "$_CODEX_REG_OK" != "1" ]]; then
+    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+      _CODEX_REG_OK=1
+    fi
   fi
 
   if [[ "$_CODEX_REG_OK" != "1" ]]; then
@@ -1472,11 +1483,17 @@ if [[ "$ASSISTANT" == "codex" ]]; then
     echo "[$TOOL_LABEL] MCP registration failed — reinstalling deps and retrying..."
     npm install -g @openai/codex mcp-remote >/dev/null 2>&1 || true
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
+    _MCP_REMOTE_BIN="$(command -v mcp-remote 2>/dev/null || true)"
     codex mcp remove dual-graph >/dev/null 2>&1 || true
-    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
-      _CODEX_REG_OK=1
-    elif _CODEX_REG_ERR="$(codex mcp add dual-graph -- mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
-      _CODEX_REG_OK=1
+    if [[ -n "$_MCP_REMOTE_BIN" ]]; then
+      if _CODEX_REG_ERR="$(codex mcp add dual-graph -- "$_MCP_REMOTE_BIN" "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+        _CODEX_REG_OK=1
+      fi
+    fi
+    if [[ "$_CODEX_REG_OK" != "1" ]]; then
+      if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+        _CODEX_REG_OK=1
+      fi
     fi
   fi
 
@@ -1558,7 +1575,7 @@ elif [[ "$ASSISTANT" == "claude" ]]; then
   fi
   claude mcp remove token-counter --scope user >/dev/null 2>&1 || true
   claude mcp remove token-counter >/dev/null 2>&1 || true
-  claude mcp add --scope user token-counter -- npx -y token-counter-mcp >/dev/null 2>&1 || true
+  claude mcp add --scope user token-counter -- npx -y token-counter-mcp@latest >/dev/null 2>&1 || true
   _TC_PORT=8899
   if [[ -f "$_TC_PORT_FILE" ]]; then _TC_PORT=$(cat "$_TC_PORT_FILE"); fi
   echo "[$TOOL_LABEL] Token counter -> http://localhost:$_TC_PORT (global)"
