@@ -1,3 +1,6 @@
+3.9.63
+- Fixed: pin mcp-remote to 0.1.14 — newer versions add OAuth discovery latency causing Codex MCP handshake timeouts
+
 3.9.62
 - Fixed: install script exits on R2 SSL failure due to set -euo pipefail — add || true so GitHub fallback runs
 

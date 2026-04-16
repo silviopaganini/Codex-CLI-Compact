@@ -1452,9 +1452,11 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   # Auto-install mcp-remote globally (Codex needs stdio bridge).
   # Always install globally so subagents can start it without npx overhead —
   # npx startup latency causes handshake timeouts in Codex subagent mode.
+  # Pin to 0.1.14 — newer versions (0.1.38+) add OAuth discovery latency
+  # that causes Codex MCP handshake timeouts.
   if ! command -v mcp-remote &>/dev/null; then
     echo "[$TOOL_LABEL] mcp-remote not found — installing globally..."
-    npm install -g mcp-remote >/dev/null 2>&1 || true
+    npm install -g mcp-remote@0.1.14 >/dev/null 2>&1 || true
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
   fi
 
@@ -1481,7 +1483,7 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   if [[ "$_CODEX_REG_OK" != "1" ]]; then
     # Auto-fix: reinstall both deps and retry once
     echo "[$TOOL_LABEL] MCP registration failed — reinstalling deps and retrying..."
-    npm install -g @openai/codex mcp-remote >/dev/null 2>&1 || true
+    npm install -g @openai/codex mcp-remote@0.1.14 >/dev/null 2>&1 || true
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
     _MCP_REMOTE_BIN="$(command -v mcp-remote 2>/dev/null || true)"
     codex mcp remove dual-graph >/dev/null 2>&1 || true
