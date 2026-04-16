@@ -264,7 +264,7 @@ URL_LAUNCH_GH="$BASE_URL/bin/dual_graph_launch.sh"
 
 # ── Download core engine ──────────────────────────────────────────────────────
 echo "[install] Downloading core engine..."
-curl -fsSL "$URL_LAUNCH_R2" -o "$INSTALL_DIR/dual_graph_launch.sh" 2>/dev/null
+curl -fsSL "$URL_LAUNCH_R2" -o "$INSTALL_DIR/dual_graph_launch.sh" 2>/dev/null || true
 # Validate: if R2 returned an HTML error page, fall back to GitHub
 if ! head -1 "$INSTALL_DIR/dual_graph_launch.sh" 2>/dev/null | grep -q "^#"; then
   curl -fsSL "$URL_LAUNCH_GH" -o "$INSTALL_DIR/dual_graph_launch.sh"
