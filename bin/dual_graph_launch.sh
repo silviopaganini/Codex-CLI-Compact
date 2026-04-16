@@ -1893,7 +1893,8 @@ CURRENT_STEP="Pre-flight checks"
 
 # 1. Verify the CLI tool is installed and in PATH (should already be fixed at registration step, but double-check)
 # For cursor/copilot, bin was resolved at registration; skip the PATH check.
-if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" ]] && ! command -v "$ASSISTANT" &>/dev/null; then
+# mcp-only mode doesn't need any CLI.
+if [[ "$ASSISTANT" != "cursor" && "$ASSISTANT" != "copilot" && "$ASSISTANT" != "mcp-only" ]] && ! command -v "$ASSISTANT" &>/dev/null; then
   # Refresh PATH one more time
   export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
   if ! command -v "$ASSISTANT" &>/dev/null; then
