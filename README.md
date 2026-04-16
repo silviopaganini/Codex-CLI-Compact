@@ -83,6 +83,30 @@ The server runs indefinitely. Point any client to `http://127.0.0.1:8080/mcp` (p
 
 **Server-only mode, no IDE launched.**
 
+#### Connecting Your AI Assistant
+
+After starting the MCP server with `dg-mcp`, you need to configure your AI assistant to connect to it:
+
+**Claude Code:**
+```bash
+claude mcp add dual-graph http://127.0.0.1:8080/mcp
+claude  # Now Claude has access to the graph tools
+```
+
+**VS Code (with MCP extension):**
+1. Install an MCP client extension (like "Claude" or "Continue")
+2. Add server: `http://127.0.0.1:8080/mcp`
+3. The graph tools will be available in your AI assistant
+
+**Custom HTTP client:**
+```bash
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+**Other MCP-compatible tools:** Configure them to connect to the MCP endpoint URL shown when the server starts.
+
 ### Claude Code (`dgc`)
 
 ```bash
