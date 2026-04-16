@@ -70,6 +70,19 @@ scoop install dual-graph
 
 ## Usage
 
+### Standalone MCP Server (`dg-mcp`)
+
+Start the MCP server without any IDE — useful for containerized environments, custom integrations, or remote development:
+
+```bash
+dg-mcp                           # scan current directory, start MCP server
+dg-mcp /path/to/project          # scan a specific project, start MCP server
+```
+
+The server runs indefinitely. Point any client to `http://127.0.0.1:8080/mcp` (port may differ if 8080 is busy). Press Ctrl+C to stop.
+
+**Server-only mode, no IDE launched.**
+
 ### Claude Code (`dgc`)
 
 ```bash
@@ -154,6 +167,22 @@ Global files in `~/.dual-graph/`:
 
 ---
 
+## Telemetry & Privacy
+
+Graperoot collects only **error reports** for stability improvements (error type + step name, no code or file paths). Telemetry is **opt-in**:
+
+- **First run:** You'll be prompted to enable/disable. No data is sent until you opt in.
+- **Disable completely:** Use the `--no-telemetry` flag or set `DG_DISABLE_TELEMETRY=1`:
+  ```bash
+  dgc --no-telemetry /path/to/project
+  dg-mcp --no-telemetry /path/to/project
+  DG_DISABLE_TELEMETRY=1 dgc .
+  ```
+
+Telemetry consent is stored in `~/.dual-graph/identity.json` and survives updates.
+
+---
+
 ## Configuration
 
 All optional, via environment variables:
@@ -165,6 +194,7 @@ All optional, via environment variables:
 | `DG_FALLBACK_MAX_CALLS_PER_TURN` | `1` | Max fallback grep calls per turn |
 | `DG_RETRIEVE_CACHE_TTL_SEC` | `900` | Retrieval cache TTL (15 min) |
 | `DG_MCP_PORT` | auto (8080-8099) | Force a specific MCP server port |
+| `DG_DISABLE_TELEMETRY` | `0` | Set to `1` to disable telemetry |
 
 ---
 
