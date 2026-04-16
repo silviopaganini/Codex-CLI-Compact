@@ -70,38 +70,80 @@ scoop install dual-graph
 
 ## Usage
 
-### Standalone MCP Server (`dg-mcp`)
+### Standalone MCP Server (`dg-mcp`) — Decoupled Approach
 
-Start the MCP server without any IDE — useful for containerized environments, custom integrations, or remote development:
+Start the MCP server independently — it's the **recommended approach** for maximum flexibility. You then integrate it with any AI assistant, VS Code extension, or custom tool:
 
 ```bash
 dg-mcp                           # scan current directory, start MCP server
-dg-mcp /path/to/project          # scan a specific project, start MCP server
+dg-mcp /path/to/project          # scan a specific project
+dg-mcp /path/to/project --port 9000  # custom port
 ```
 
-The server runs indefinitely. Point any client to `http://127.0.0.1:8080/mcp` (port may differ if 8080 is busy). Press Ctrl+C to stop.
+The server runs indefinitely on a port (default: 8080, configurable via `DG_MCP_PORT` env var or `--port` flag). **No IDE is launched** — you control the integration.
 
-**Server-only mode, no IDE launched.**
+#### Integration Examples
 
-### Claude Code (`dgc`)
+**1. Hook Claude Code:**
+```bash
+# Terminal A: Start the MCP server
+dg-mcp /path/to/project
+
+# Terminal B: Configure Claude and start
+claude mcp add dual-graph http://127.0.0.1:8080/mcp
+claude
+```
+
+**2. Hook Codex CLI:**
+```bash
+# Terminal A: Start the MCP server
+dg-mcp /path/to/project
+
+# Terminal B: Configure Codex (via mcp-remote bridge)
+codex mcp add dual-graph -- npx mcp-remote http://127.0.0.1:8080/mcp --allow-http
+codex
+```
+
+**3. Hook VS Code (Copilot extension):**
+```bash
+# Terminal A: Start the MCP server
+dg-mcp /path/to/project
+
+# VS Code: Settings → MCP Servers → Add
+# URL: http://127.0.0.1:8080/mcp
+```
+
+**4. Custom integrations (HTTP):**
+```bash
+# Terminal A: Start the MCP server
+dg-mcp /path/to/project
+
+# Terminal B or any tool:
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+#### Why Decoupled is Better
+
+- ✅ **Works with any MCP-compatible tool** (Claude, Codex, VS Code, custom tools, etc.)
+- ✅ **User controls the integration** — not locked into specific IDEs
+- ✅ **Perfect for containers & services** — run as a background daemon
+- ✅ **Multi-client support** — one server, many consumers
+- ✅ **Cleaner architecture** — MCP server is pure infrastructure
+
+### Quick-Start with IDE (`dgc`, `dg`)
+
+If you want the all-in-one experience without manual setup, use the traditional commands. They **automatically start the MCP server + register it + launch the IDE**:
 
 ```bash
-dgc                              # scan current directory, launch Claude
-dgc /path/to/project             # scan a specific project
-dgc /path/to/project "fix the login bug"   # start with a prompt
+dgc /path/to/project             # Start MCP + Claude Code
+dg /path/to/project              # Start MCP + Codex
 ```
 
-### Codex CLI (`dg`)
-
-```bash
-dg                               # scan current directory, launch Codex
-dg /path/to/project              # scan a specific project
-dg /path/to/project "add tests"  # start with a prompt
-```
+This is equivalent to running `dg-mcp` + manual integration (but all in one command).
 
 ### Other AI Assistants (`graperoot`)
-
-You can also use the `graperoot` command directly with any supported assistant:
 
 ```bash
 graperoot .                      # current directory, default (Claude)
