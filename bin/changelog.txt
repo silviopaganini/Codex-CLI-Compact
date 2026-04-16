@@ -1,3 +1,6 @@
+3.9.61
+- Fixed: install fallback to GitHub when R2 returns HTML error page (SSL cert mismatch on some systems)
+
 3.9.60
 - Fixed: Codex subagent MCP handshake failure — register mcp-remote using absolute binary path instead of npx to eliminate startup latency that caused "connection closed: initialize response" in subagent mode
 

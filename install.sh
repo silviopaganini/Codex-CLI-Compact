@@ -259,11 +259,17 @@ date +%Y-%m-%d > "$INSTALL_DIR/install_date.txt" 2>/dev/null || true
 # ── Download URLs ─────────────────────────────────────────────────────────────
 R2="https://pub-18426978d5a14bf4a60ddedd7d5b6dab.r2.dev"
 BASE_URL="https://raw.githubusercontent.com/kunal12203/Codex-CLI-Compact/main"
-URL_LAUNCH="$R2/dual_graph_launch.sh"
+URL_LAUNCH_R2="$R2/dual_graph_launch.sh"
+URL_LAUNCH_GH="$BASE_URL/bin/dual_graph_launch.sh"
 
 # ── Download core engine ──────────────────────────────────────────────────────
 echo "[install] Downloading core engine..."
-curl -fsSL "$URL_LAUNCH" -o "$INSTALL_DIR/dual_graph_launch.sh" && chmod +x "$INSTALL_DIR/dual_graph_launch.sh"
+curl -fsSL "$URL_LAUNCH_R2" -o "$INSTALL_DIR/dual_graph_launch.sh" 2>/dev/null
+# Validate: if R2 returned an HTML error page, fall back to GitHub
+if ! head -1 "$INSTALL_DIR/dual_graph_launch.sh" 2>/dev/null | grep -q "^#"; then
+  curl -fsSL "$URL_LAUNCH_GH" -o "$INSTALL_DIR/dual_graph_launch.sh"
+fi
+chmod +x "$INSTALL_DIR/dual_graph_launch.sh"
 curl -sf  "$BASE_URL/bin/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null \
   || curl -sf "$R2/version.txt" -o "$INSTALL_DIR/version.txt" 2>/dev/null \
   || true
