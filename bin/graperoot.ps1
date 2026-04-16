@@ -188,7 +188,7 @@ if (-not (Test-Path $DgcPs1)) {
 function Get-FreePort {
     for ($port = 8080; $port -le 8199; $port++) {
         try {
-            $l = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, $port)
+            $l = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
             $l.Start(); $l.Stop(); return $port
         } catch {}
     }
@@ -363,11 +363,11 @@ if ($Assistant -eq "cursor") {
         } catch {}
     }
     $mcpServers | Add-Member -NotePropertyName "dual-graph" `
-        -NotePropertyValue ([PSCustomObject]@{ url = "http://localhost:$McpPort/mcp" }) -Force
+        -NotePropertyValue ([PSCustomObject]@{ url = "http://127.0.0.1:$McpPort/mcp" }) -Force
     [System.IO.File]::WriteAllText($McpJson, ([PSCustomObject]@{ mcpServers = $mcpServers } | ConvertTo-Json -Depth 5))
 
     Write-Host "[$Tool] MCP config written -> $McpJson"
-    Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
+    Write-Host "[$Tool] MCP URL: http://127.0.0.1:$McpPort/mcp"
     Write-Host ""
     Write-Host "[$Tool] NOTE: activate dual-graph in Cursor (one-time setup):"
     Write-Host "[$Tool]   Cursor Settings -> Tools & MCP -> enable 'dual-graph'"
@@ -412,14 +412,14 @@ if ($Assistant -eq "gemini") {
     }
     if (-not $existing.mcpServers) { $existing | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue @{} -Force }
     $existing.mcpServers | Add-Member -NotePropertyName "dual-graph" `
-        -NotePropertyValue @{ httpUrl = "http://localhost:$McpPort/mcp" } -Force
+        -NotePropertyValue @{ httpUrl = "http://127.0.0.1:$McpPort/mcp" } -Force
     $gemTmp = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($gemTmp, ($existing | ConvertTo-Json -Depth 5 -Compress))
     & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $gemTmp $GeminiConf
     Remove-Item $gemTmp -ErrorAction SilentlyContinue
 
     Write-Host "[$Tool] MCP config written -> $GeminiConf"
-    Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
+    Write-Host "[$Tool] MCP URL: http://127.0.0.1:$McpPort/mcp"
     Write-Host ""
 
     Set-Location $ProjectPath
@@ -455,7 +455,7 @@ if ($Assistant -eq "opencode") {
         } catch {}
     }
     $ocMcp | Add-Member -NotePropertyName "dual-graph" `
-        -NotePropertyValue ([PSCustomObject]@{ type = "remote"; url = "http://localhost:$McpPort/mcp"; enabled = $true }) -Force
+        -NotePropertyValue ([PSCustomObject]@{ type = "remote"; url = "http://127.0.0.1:$McpPort/mcp"; enabled = $true }) -Force
     $ocOut = [PSCustomObject]@{}
     $ocOut | Add-Member -NotePropertyName '$schema' -NotePropertyValue $ocSchema
     $ocOut | Add-Member -NotePropertyName 'mcp'     -NotePropertyValue $ocMcp
@@ -468,7 +468,7 @@ if ($Assistant -eq "opencode") {
     Remove-Item $ocTmp -ErrorAction SilentlyContinue
 
     Write-Host "[$Tool] MCP config written -> $OpenCodeConf"
-    Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
+    Write-Host "[$Tool] MCP URL: http://127.0.0.1:$McpPort/mcp"
     Write-Host ""
 
     Set-Location $ProjectPath
@@ -511,14 +511,14 @@ if ($Assistant -eq "copilot") {
     }
     if (-not $vsConf.servers) { $vsConf | Add-Member -NotePropertyName "servers" -NotePropertyValue ([PSCustomObject]@{}) -Force }
     $vsConf.servers | Add-Member -NotePropertyName "dual-graph" `
-        -NotePropertyValue ([PSCustomObject]@{ type = "http"; url = "http://localhost:$McpPort/mcp" }) -Force
+        -NotePropertyValue ([PSCustomObject]@{ type = "http"; url = "http://127.0.0.1:$McpPort/mcp" }) -Force
     $vsTmp = [System.IO.Path]::GetTempFileName()
     [System.IO.File]::WriteAllText($vsTmp, ($vsConf | ConvertTo-Json -Depth 5 -Compress))
     & $Python -c "import json,sys;d=json.load(open(sys.argv[1]));open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(d,indent=2)+'\n')" $vsTmp $McpJson
     Remove-Item $vsTmp -ErrorAction SilentlyContinue
 
     Write-Host "[$Tool] MCP config written -> $McpJson"
-    Write-Host "[$Tool] MCP URL: http://localhost:$McpPort/mcp"
+    Write-Host "[$Tool] MCP URL: http://127.0.0.1:$McpPort/mcp"
     Write-Host ""
     Write-Host "[$Tool] NOTE: enable dual-graph in VS Code (one-time setup):"
     Write-Host "[$Tool]   Copilot Chat panel -> Agent mode -> enable 'dual-graph'"

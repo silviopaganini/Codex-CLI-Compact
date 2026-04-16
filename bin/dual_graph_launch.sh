@@ -300,13 +300,13 @@ else
   CURRENT_STEP="Selecting port"
   MCP_PORT=8080
   _port_in_use() {
-    # Try to actually bind to 0.0.0.0:port (matches server bind address)
+    # Try to actually bind to 127.0.0.1:port (matches server bind address)
     if python3 -c "
 import socket, sys
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 try:
-    s.bind(('0.0.0.0', int(sys.argv[1])))
+    s.bind(('127.0.0.1', int(sys.argv[1])))
     s.close()
     sys.exit(1)  # port is FREE
 except OSError:
@@ -1214,7 +1214,7 @@ CURRENT_STEP="Starting MCP server"
 env \
   DG_DATA_DIR="$DATA_DIR" \
   DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
-  DG_BASE_URL="http://localhost:$MCP_PORT" \
+  DG_BASE_URL="http://127.0.0.1:$MCP_PORT" \
   PORT="$MCP_PORT" \
   "${_MCP_CMD[@]}" \
   >> "$RUN_DIR/mcp_server.log" 2>&1 &
@@ -1227,7 +1227,7 @@ echo "[$TOOL_LABEL] Waiting for MCP server..."
 CURRENT_STEP="Waiting for MCP server"
 _MCP_READY=0
 for i in $(seq 1 20); do
-  if nc -z localhost "$MCP_PORT" 2>/dev/null || \
+  if nc -z 127.0.0.1 "$MCP_PORT" 2>/dev/null || \
      python3 -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('127.0.0.1',$MCP_PORT))==0 else 1)" 2>/dev/null; then
     _MCP_READY=1
     break
@@ -1243,7 +1243,7 @@ if [[ "$_MCP_READY" != "1" ]]; then
   env \
     DG_DATA_DIR="$DATA_DIR" \
     DUAL_GRAPH_PROJECT_ROOT="$PROJECT" \
-    DG_BASE_URL="http://localhost:$MCP_PORT" \
+    DG_BASE_URL="http://127.0.0.1:$MCP_PORT" \
     PORT="$MCP_PORT" \
     "${_MCP_CMD[@]}" \
     >> "$RUN_DIR/mcp_server.log" 2>&1 &
@@ -1253,7 +1253,7 @@ if [[ "$_MCP_READY" != "1" ]]; then
   trap 'echo ""; echo "[$TOOL_LABEL] Shutting down MCP server (PID $MCP_PID)..."; kill "$MCP_PID" 2>/dev/null; rm -f "$RUN_DIR/mcp_server.pid" "$RUN_DIR/mcp_port"' EXIT INT TERM HUP
   _MCP_READY=0
   for i in $(seq 1 15); do
-    if nc -z localhost "$MCP_PORT" 2>/dev/null || \
+    if nc -z 127.0.0.1 "$MCP_PORT" 2>/dev/null || \
        python3 -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('127.0.0.1',$MCP_PORT))==0 else 1)" 2>/dev/null; then
       _MCP_READY=1
       break
@@ -1277,7 +1277,7 @@ if [[ "$ASSISTANT" == "claude" ]]; then
   cat > "$DATA_DIR/prime.sh" << PRIMEEOF
 #!/usr/bin/env bash
 PORT=\$(cat "$RUN_DIR/mcp_port" 2>/dev/null || echo $MCP_PORT)
-OUT=\$(curl -sf --max-time 2 "http://localhost:\$PORT/prime" 2>/dev/null || true)
+OUT=\$(curl -sf --max-time 2 "http://127.0.0.1:\$PORT/prime" 2>/dev/null || true)
 if [[ -n "\$OUT" ]]; then
   echo "\$OUT"
 fi
@@ -1365,7 +1365,7 @@ PYEOF
   if [[ -n "\$USAGE" ]]; then
     # POST to MCP graph server (always running, reliable)
     MCP_PORT=\$(cat "$RUN_DIR/mcp_port" 2>/dev/null || echo "$MCP_PORT")
-    curl -sf -X POST "http://localhost:\$MCP_PORT/log" \
+    curl -sf -X POST "http://127.0.0.1:\$MCP_PORT/log" \
       -H "Content-Type: application/json" \
       -d "\$USAGE" \
       >/dev/null 2>&1 || true
@@ -1373,7 +1373,7 @@ PYEOF
     PORT_FILE="\$HOME/.claude/token-counter/dashboard-port.txt"
     DASH_PORT=8899
     if [[ -f "\$PORT_FILE" ]]; then DASH_PORT=\$(cat "\$PORT_FILE"); fi
-    curl -sf -X POST "http://localhost:\$DASH_PORT/log" \
+    curl -sf -X POST "http://127.0.0.1:\$DASH_PORT/log" \
       -H "Content-Type: application/json" \
       -d "\$USAGE" \
       >/dev/null 2>&1 || true
@@ -1454,9 +1454,35 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   # npx startup latency causes handshake timeouts in Codex subagent mode.
   # Pin to 0.1.14 — newer versions (0.1.38+) add OAuth discovery latency
   # that causes Codex MCP handshake timeouts.
-  if ! command -v mcp-remote &>/dev/null; then
-    echo "[$TOOL_LABEL] mcp-remote not found — installing globally..."
-    npm install -g mcp-remote@0.1.14 >/dev/null 2>&1 || true
+  # Version check: use `npm list` but fall back to binary presence so that
+  # packages installed via `sudo npm install -g` (different prefix) are detected.
+  _mcp_need_install=0
+  _mcp_bin_path="$(command -v mcp-remote 2>/dev/null || true)"
+  if [[ -z "$_mcp_bin_path" ]]; then
+    _mcp_need_install=1
+  elif ! npm list -g mcp-remote@0.1.14 --depth=0 &>/dev/null 2>&1; then
+    # Binary exists but wrong version — check via the binary's own npm prefix too
+    _mcp_prefix="$(npm prefix -g 2>/dev/null || true)"
+    if ! npm list --prefix "$_mcp_prefix" mcp-remote@0.1.14 --depth=0 &>/dev/null 2>&1; then
+      _mcp_need_install=1
+    fi
+  fi
+  if [[ "$_mcp_need_install" == "1" ]]; then
+    echo "[$TOOL_LABEL] Installing mcp-remote@0.1.14 (pinned — 0.1.38+ causes handshake timeouts)..."
+    _npm_out="$(npm install -g mcp-remote@0.1.14 2>&1)"
+    _npm_exit=$?
+    if [[ $_npm_exit -ne 0 ]]; then
+      if echo "$_npm_out" | grep -q "EACCES"; then
+        echo "[$TOOL_LABEL] Error: permission denied installing mcp-remote."
+        echo "[$TOOL_LABEL] Fix: run this once, then re-run dg:"
+        echo "[$TOOL_LABEL]   sudo npm install -g mcp-remote@0.1.14"
+        echo "[$TOOL_LABEL] Or fix npm global permissions: https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally"
+      else
+        echo "[$TOOL_LABEL] Warning: mcp-remote install failed:"
+        echo "$_npm_out" | tail -5
+      fi
+      # Don't exit — binary may already exist from a previous sudo install
+    fi
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
   fi
 
@@ -1470,12 +1496,12 @@ if [[ "$ASSISTANT" == "codex" ]]; then
   _CODEX_REG_OK=0
   _CODEX_REG_ERR=""
   if [[ -n "$_MCP_REMOTE_BIN" ]]; then
-    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- "$_MCP_REMOTE_BIN" "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- "$_MCP_REMOTE_BIN" "http://127.0.0.1:$MCP_PORT/mcp" --allow-http 2>&1)"; then
       _CODEX_REG_OK=1
     fi
   fi
   if [[ "$_CODEX_REG_OK" != "1" ]]; then
-    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+    if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://127.0.0.1:$MCP_PORT/mcp" --allow-http 2>&1)"; then
       _CODEX_REG_OK=1
     fi
   fi
@@ -1488,19 +1514,19 @@ if [[ "$ASSISTANT" == "codex" ]]; then
     _MCP_REMOTE_BIN="$(command -v mcp-remote 2>/dev/null || true)"
     codex mcp remove dual-graph >/dev/null 2>&1 || true
     if [[ -n "$_MCP_REMOTE_BIN" ]]; then
-      if _CODEX_REG_ERR="$(codex mcp add dual-graph -- "$_MCP_REMOTE_BIN" "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+      if _CODEX_REG_ERR="$(codex mcp add dual-graph -- "$_MCP_REMOTE_BIN" "http://127.0.0.1:$MCP_PORT/mcp" --allow-http 2>&1)"; then
         _CODEX_REG_OK=1
       fi
     fi
     if [[ "$_CODEX_REG_OK" != "1" ]]; then
-      if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://localhost:$MCP_PORT/mcp" --allow-http 2>&1)"; then
+      if _CODEX_REG_ERR="$(codex mcp add dual-graph -- npx mcp-remote "http://127.0.0.1:$MCP_PORT/mcp" --allow-http 2>&1)"; then
         _CODEX_REG_OK=1
       fi
     fi
   fi
 
   if [[ "$_CODEX_REG_OK" == "1" ]]; then
-    echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp (via mcp-remote)"
+    echo "[$TOOL_LABEL] MCP config updated -> http://127.0.0.1:$MCP_PORT/mcp (via mcp-remote)"
   else
     echo "[$TOOL_LABEL] Error: failed to register MCP with codex after auto-fix."
     echo "[$TOOL_LABEL] stderr: $_CODEX_REG_ERR"
@@ -1533,11 +1559,11 @@ elif [[ "$ASSISTANT" == "claude" ]]; then
   claude mcp remove dual-graph >/dev/null 2>&1 || true
   _MCP_REG_OK=0
   _MCP_REG_ERR=""
-  if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+  if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
     _MCP_REG_OK=1
-  elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+  elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
     _MCP_REG_OK=1
-  elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+  elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
     _MCP_REG_OK=1
   fi
 
@@ -1547,11 +1573,11 @@ elif [[ "$ASSISTANT" == "claude" ]]; then
     npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 || true
     export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
     claude mcp remove dual-graph >/dev/null 2>&1 || true
-    if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    if _MCP_REG_ERR="$(claude mcp add --transport http dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
       _MCP_REG_OK=1
-    elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    elif _MCP_REG_ERR="$(claude mcp add --transport sse dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
       _MCP_REG_OK=1
-    elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://localhost:$MCP_PORT/mcp" 2>&1)"; then
+    elif _MCP_REG_ERR="$(claude mcp add dual-graph "http://127.0.0.1:$MCP_PORT/mcp" 2>&1)"; then
       _MCP_REG_OK=1
     fi
   fi
@@ -1566,7 +1592,7 @@ elif [[ "$ASSISTANT" == "claude" ]]; then
     _send_cli_error "Registering MCP" "MCP registration failed after auto-fix (claude): $_MCP_REG_ERR"
     exit 1
   fi
-  echo "[$TOOL_LABEL] MCP config updated -> http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL] MCP config updated -> http://127.0.0.1:$MCP_PORT/mcp"
 
   # ── Token Counter MCP (global user scope — works in all projects) ────────
   # Kill any leftover token-counter-mcp process so it can reclaim port 8899
@@ -1580,7 +1606,7 @@ elif [[ "$ASSISTANT" == "claude" ]]; then
   claude mcp add --scope user token-counter -- npx -y token-counter-mcp@latest >/dev/null 2>&1 || true
   _TC_PORT=8899
   if [[ -f "$_TC_PORT_FILE" ]]; then _TC_PORT=$(cat "$_TC_PORT_FILE"); fi
-  echo "[$TOOL_LABEL] Token counter -> http://localhost:$_TC_PORT (global)"
+  echo "[$TOOL_LABEL] Token counter -> http://127.0.0.1:$_TC_PORT (global)"
   # ───────────────────────────────────────────────────────────────────────────
 
 elif [[ "$ASSISTANT" == "cursor" ]]; then
@@ -1638,14 +1664,14 @@ if os.path.exists(config_file):
     except Exception:
         pass
 servers = existing.get("mcpServers", {})
-servers["dual-graph"] = {"url": f"http://localhost:{port}/mcp"}
+servers["dual-graph"] = {"url": f"http://127.0.0.1:{port}/mcp"}
 existing["mcpServers"] = servers
 with open(config_file, "w", encoding="utf-8") as f:
     json.dump(existing, f, indent=2)
     f.write("\n")
 PY
   echo "[$TOOL_LABEL] MCP config written -> $PROJECT/.cursor/mcp.json"
-  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL] MCP URL: http://127.0.0.1:$MCP_PORT/mcp"
   echo "[$TOOL_LABEL]"
   echo "[$TOOL_LABEL] NOTE: activate dual-graph in Cursor (one-time setup):"
   echo "[$TOOL_LABEL]   Cursor Settings -> Tools & MCP -> enable 'dual-graph'"
@@ -1683,14 +1709,14 @@ if os.path.exists(config_file):
     except Exception:
         pass
 servers = existing.get("mcpServers", {})
-servers["dual-graph"] = {"httpUrl": f"http://localhost:{port}/mcp"}
+servers["dual-graph"] = {"httpUrl": f"http://127.0.0.1:{port}/mcp"}
 existing["mcpServers"] = servers
 with open(config_file, "w", encoding="utf-8") as f:
     json.dump(existing, f, indent=2)
     f.write("\n")
 PY
   echo "[$TOOL_LABEL] MCP config written -> $HOME/.gemini/settings.json"
-  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL] MCP URL: http://127.0.0.1:$MCP_PORT/mcp"
 
 elif [[ "$ASSISTANT" == "opencode" ]]; then
   CURRENT_STEP="Registering MCP (OpenCode)"
@@ -1727,14 +1753,14 @@ if os.path.exists(config_file):
 if "$schema" not in existing:
     existing["$schema"] = "https://opencode.ai/config.json"
 mcp = existing.get("mcp", {})
-mcp["dual-graph"] = {"type": "remote", "url": f"http://localhost:{port}/mcp", "enabled": True}
+mcp["dual-graph"] = {"type": "remote", "url": f"http://127.0.0.1:{port}/mcp", "enabled": True}
 existing["mcp"] = mcp
 with open(config_file, "w", encoding="utf-8") as f:
     json.dump(existing, f, indent=2)
     f.write("\n")
 PY
   echo "[$TOOL_LABEL] MCP config written -> $PROJECT/opencode.json"
-  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL] MCP URL: http://127.0.0.1:$MCP_PORT/mcp"
 
 elif [[ "$ASSISTANT" == "copilot" ]]; then
   CURRENT_STEP="Registering MCP (Copilot / VS Code)"
@@ -1784,14 +1810,14 @@ if os.path.exists(config_file):
     except Exception:
         pass
 servers = existing.get("servers", {})
-servers["dual-graph"] = {"type": "http", "url": f"http://localhost:{port}/mcp"}
+servers["dual-graph"] = {"type": "http", "url": f"http://127.0.0.1:{port}/mcp"}
 existing["servers"] = servers
 with open(config_file, "w", encoding="utf-8") as f:
     json.dump(existing, f, indent=2)
     f.write("\n")
 PY
   echo "[$TOOL_LABEL] MCP config written -> $PROJECT/.vscode/mcp.json"
-  echo "[$TOOL_LABEL] MCP URL: http://localhost:$MCP_PORT/mcp"
+  echo "[$TOOL_LABEL] MCP URL: http://127.0.0.1:$MCP_PORT/mcp"
   echo "[$TOOL_LABEL]"
   echo "[$TOOL_LABEL] NOTE: enable dual-graph in VS Code (one-time setup):"
   echo "[$TOOL_LABEL]   Copilot Chat panel -> Agent mode -> enable 'dual-graph'"

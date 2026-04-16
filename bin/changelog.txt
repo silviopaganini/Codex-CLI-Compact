@@ -1,3 +1,8 @@
+3.9.64
+- Fixed: MCP server now binds to 127.0.0.1 instead of 0.0.0.0 — eliminates network exposure on shared/VM setups
+- Fixed: all MCP registration URLs, health checks, and hooks use 127.0.0.1 — resolves IPv6 connection failures on Windows
+- Fixed: port availability probe updated to 127.0.0.1 to match server bind address on all platforms
+
 3.9.63
 - Fixed: pin mcp-remote to 0.1.14 — newer versions add OAuth discovery latency causing Codex MCP handshake timeouts
 

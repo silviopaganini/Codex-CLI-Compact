@@ -210,7 +210,7 @@ function Download-File([string]$Primary, [string]$Fallback, [string]$OutFile) {
 function Get-FreePort {
     for ($port = 8080; $port -le 8199; $port++) {
         try {
-            $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, $port)
+            $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
             $listener.Start()
             $listener.Stop()
             return $port
@@ -918,7 +918,7 @@ Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation
     $errLog = Join-Path $DataDir "mcp_server.err.log"
     $env:DG_DATA_DIR = $DataDir
     $env:DUAL_GRAPH_PROJECT_ROOT = $resolvedProject
-    $env:DG_BASE_URL = "http://localhost:$port"
+    $env:DG_BASE_URL = "http://127.0.0.1:$port"
     $env:PORT = "$port"
     if ($grapeOk) {
         $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
@@ -949,12 +949,12 @@ Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation
     # PowerShell 7 can treat non-zero native exits as terminating errors.
     # Handle Claude CLI exits explicitly so "not found" on remove stays harmless.
     Remove-ClaudeMcpSafe "dual-graph"
-    $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "http", "dual-graph", "http://localhost:$port/mcp")
+    $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "http", "dual-graph", "http://127.0.0.1:$port/mcp")
     if ($mcpAddExit -ne 0) {
-        $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "sse", "dual-graph", "http://localhost:$port/mcp")
+        $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "--transport", "sse", "dual-graph", "http://127.0.0.1:$port/mcp")
     }
     if ($mcpAddExit -ne 0) {
-        $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "dual-graph", "--url", "http://localhost:$port/mcp")
+        $mcpAddExit = Invoke-NativeQuiet "claude" @("mcp", "add", "dual-graph", "--url", "http://127.0.0.1:$port/mcp")
     }
     if ($mcpAddExit -ne 0) {
         Stop-McpServer $pidFile $portFile
@@ -968,7 +968,7 @@ Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation
         Send-CliError "MCP registration" "failed to register MCP in Claude after auto-fix"
         exit 1
     }
-    Write-Host "[$Tool] MCP registered -> http://localhost:$port/mcp"
+    Write-Host "[$Tool] MCP registered -> http://127.0.0.1:$port/mcp"
 
     if (-not $env:DG_DISABLE_TOKEN_COUNTER) {
         # Wrap entirely so token-counter failures never kill the main launcher.
@@ -1036,7 +1036,7 @@ Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation
                     [void](Invoke-NativeQuiet "claude" @("mcp", "add", "--scope", "user", "token-counter", "--", $nodeCmd, $tcMain))
                     $tcPortFile = Join-Path $env:USERPROFILE ".claude\token-counter\dashboard-port.txt"
                     $tcPort = if (Test-Path $tcPortFile) { (Get-Content $tcPortFile -Raw).Trim() } else { "8899" }
-                    Write-Host "[$Tool] Token counter -> http://localhost:$tcPort (global)"
+                    Write-Host "[$Tool] Token counter -> http://127.0.0.1:$tcPort (global)"
                 } else {
                     Write-Host "[$Tool] Token counter skipped (entry file not found). Set DG_DISABLE_TOKEN_COUNTER=1 to silence."
                 }
@@ -1085,7 +1085,7 @@ Keep ``CONTEXT.md`` under 20 lines total. Do NOT summarize the full conversation
     @"
 `$port = if (Test-Path '$portFile') { Get-Content '$portFile' } else { '$port' }
 try {
-    `$out = (Invoke-WebRequest "http://localhost:`$port/prime" -UseBasicParsing -TimeoutSec 3).Content
+    `$out = (Invoke-WebRequest "http://127.0.0.1:`$port/prime" -UseBasicParsing -TimeoutSec 3).Content
     if (`$out) { Write-Output `$out; Write-Error "[dual-graph] Context loaded (port `$port)" }
 } catch {
     Write-Error "[dual-graph] MCP server not reachable on port `$port -- run dgc to restart"
@@ -1143,11 +1143,11 @@ if ($transcript -and (Test-Path $transcript)) {
             # POST to MCP graph server (always running, reliable)
             $mcpPortFile = Join-Path "__DATADIR__" "mcp_port"
             $mcpPort = if (Test-Path $mcpPortFile) { (Get-Content $mcpPortFile -Raw).Trim() } else { "8080" }
-            Invoke-RestMethod -Method Post -Uri "http://localhost:$mcpPort/log" -ContentType 'application/json' -Body $body -ErrorAction SilentlyContinue | Out-Null
+            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$mcpPort/log" -ContentType 'application/json' -Body $body -ErrorAction SilentlyContinue | Out-Null
             # Also POST to token-counter-mcp dashboard if available
             $portFile = Join-Path $env:USERPROFILE ".claude\token-counter\dashboard-port.txt"
             $dashPort = if (Test-Path $portFile) { (Get-Content $portFile -Raw).Trim() } else { "8899" }
-            Invoke-RestMethod -Method Post -Uri "http://localhost:$dashPort/log" -ContentType 'application/json' -Body $body -ErrorAction SilentlyContinue | Out-Null
+            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$dashPort/log" -ContentType 'application/json' -Body $body -ErrorAction SilentlyContinue | Out-Null
         }
     } catch {}
 }

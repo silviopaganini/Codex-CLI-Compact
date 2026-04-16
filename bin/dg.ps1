@@ -130,7 +130,7 @@ function Download-File([string]$Primary, [string]$Fallback, [string]$OutFile) {
 function Get-FreePort {
     for ($port = 8080; $port -le 8199; $port++) {
         try {
-            $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Any, $port)
+            $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
             $listener.Start()
             $listener.Stop()
             return $port
@@ -560,7 +560,7 @@ try {
     $errLog = Join-Path $DataDir "mcp_server.err.log"
     $env:DG_DATA_DIR = $DataDir
     $env:DUAL_GRAPH_PROJECT_ROOT = $resolvedProject
-    $env:DG_BASE_URL = "http://localhost:$port"
+    $env:DG_BASE_URL = "http://127.0.0.1:$port"
     $env:DG_MCP_PORT = "$port"
     if ($grapeOk) {
         $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
@@ -574,7 +574,7 @@ try {
         Write-Host "[$Tool] MCP server did not start -- restarting on new port..."
         Stop-McpServer $pidFile $portFile
         $port = $port + 1
-        $env:DG_BASE_URL = "http://localhost:$port"
+        $env:DG_BASE_URL = "http://127.0.0.1:$port"
         $env:DG_MCP_PORT = "$port"
         if ($grapeOk) {
             $server = Start-Process -FilePath (Join-Path $VenvBin "mcp-graph-server.exe") -RedirectStandardOutput $log -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
@@ -620,38 +620,57 @@ try {
         Send-CliError "npx check" "npx not found"
         exit 1
     }
-    if (-not (Get-Command mcp-remote -ErrorAction SilentlyContinue)) {
-        Write-Host "[$Tool] mcp-remote not found -- installing..."
-        Invoke-NativeQuiet "npm" @("install", "-g", "mcp-remote") | Out-Null
+    # Pin to 0.1.14 — 0.1.38+ adds OAuth discovery latency causing Codex MCP handshake timeouts.
+    # Check binary presence first (covers sudo-installed packages with a different global prefix).
+    $mcpBinExists = [bool](Get-Command mcp-remote -ErrorAction SilentlyContinue)
+    $mcpCorrectVer = $false
+    if ($mcpBinExists) {
+        $null = npm list -g mcp-remote@0.1.14 --depth=0 2>$null
+        $mcpCorrectVer = ($LASTEXITCODE -eq 0)
+    }
+    if (-not $mcpCorrectVer) {
+        Write-Host "[$Tool] Installing mcp-remote@0.1.14 (pinned -- 0.1.38+ causes handshake timeouts)..."
+        $npmOut = & npm install -g mcp-remote@0.1.14 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            if ($npmOut -match "EACCES") {
+                Write-Host "[$Tool] Error: permission denied installing mcp-remote."
+                Write-Host "[$Tool] Fix: run this once in an Administrator terminal, then re-run dg:"
+                Write-Host "[$Tool]   npm install -g mcp-remote@0.1.14"
+            } else {
+                Write-Host "[$Tool] Warning: mcp-remote install failed:"
+                $npmOut | Select-Object -Last 5 | ForEach-Object { Write-Host "[$Tool]   $_" }
+            }
+            # Don't exit — binary may already exist from a previous elevated install
+        }
     }
 
     Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
-    $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp", "--allow-http")
+    $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://127.0.0.1:$port/mcp", "--allow-http")
     # Fallback: try global mcp-remote
     if ($mcpAddExit -ne 0) {
         $mcpRemoteCmd = (Get-Command mcp-remote -ErrorAction SilentlyContinue).Source
         if ($mcpRemoteCmd) {
-            $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $mcpRemoteCmd, "http://localhost:$port/mcp", "--allow-http")
+            $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $mcpRemoteCmd, "http://127.0.0.1:$port/mcp", "--allow-http")
         }
     }
     # Auto-fix: reinstall deps and retry
     if ($mcpAddExit -ne 0) {
         Write-Host "[$Tool] MCP registration failed -- reinstalling deps and retrying..."
-        Invoke-NativeQuiet "npm" @("install", "-g", "@openai/codex", "mcp-remote") | Out-Null
+        Invoke-NativeQuiet "npm" @("install", "-g", "@openai/codex", "mcp-remote@0.1.14") | Out-Null
         Invoke-NativeQuiet "codex" @("mcp", "remove", "dual-graph") | Out-Null
-        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://localhost:$port/mcp", "--allow-http")
+        $mcpAddExit = Invoke-NativeQuiet "codex" @("mcp", "add", "dual-graph", "--", $npxCmd, "mcp-remote", "http://127.0.0.1:$port/mcp", "--allow-http")
     }
     if ($mcpAddExit -ne 0) {
         Stop-McpServer $pidFile $portFile
         Write-Host "[$Tool] Error: failed to register MCP with codex after auto-fix."
         Write-Host "[$Tool] Manual fix:"
-        Write-Host "[$Tool]   npm install -g @openai/codex mcp-remote"
+        Write-Host "[$Tool]   npm install -g @openai/codex mcp-remote@0.1.14"
         Write-Host "[$Tool]   Then run dg again."
         Write-Host "[$Tool] If it still fails, join Discord: https://discord.gg/rxgVVgCh"
         Send-CliError "MCP registration" "failed to register MCP with codex after auto-fix"
         exit 1
     }
-    Write-Host "[$Tool] MCP registered -> http://localhost:$port/mcp (via mcp-remote)"
+    Write-Host "[$Tool] MCP registered -> http://127.0.0.1:$port/mcp (via mcp-remote)"
 
     Write-Host ""
     Write-Host "[$Tool] Questions, bugs, or feedback? Join the community:"
